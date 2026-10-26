@@ -1,0 +1,29 @@
+{# Profile card shared by the worker dashboard and the admin worker page. #}
+{% macro profile_card(profile) %}
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h2 class="h6 text-muted mb-1">Ажил хийх боломж</h2>
+      <p class="mb-3">
+        <span class="badge text-bg-{{ profile.availability_badge }} fs-6">{{ profile.availability_label }}</span>
+      </p>
+
+      <h2 class="h6 text-muted mb-1">Ур чадвар</h2>
+      {% if profile.skills %}
+        <ul class="list-unstyled d-flex flex-wrap gap-2 mb-3">
+          {% for skill in profile.skills %}
+            <li><span class="badge rounded-pill text-bg-light border fs-6 fw-normal">{{ skill.name }}</span></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-muted mb-3">Ур чадвар сонгоогүй байна.</p>
+      {% endif %}
+
+      <h2 class="h6 text-muted mb-1">Товч танилцуулга</h2>
+      {% if profile.description %}
+        <p class="mb-0 profile-description">{{ profile.description }}</p>
+      {% else %}
+        <p class="text-muted mb-0">Танилцуулга бичээгүй байна.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}

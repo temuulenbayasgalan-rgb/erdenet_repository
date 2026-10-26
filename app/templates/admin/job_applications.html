@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import badge %}
+{% block title %}Өргөдлүүд · {{ job.title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10 col-lg-8">
+    <h1 class="h4 mb-1 text-break">Өргөдлүүд: {{ job.title }}</h1>
+    <p class="text-muted small">
+      {{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }} ·
+      томилогдсон {{ job.active_assignments|length }} / {{ job.workers_needed }}
+    </p>
+
+    <form method="get" class="d-flex gap-2 align-items-end mb-3" novalidate>
+      <div class="flex-fill">
+        {{ form.status.label(class="form-label small mb-1") }}
+        {{ form.status(class="form-select") }}
+      </div>
+      <button type="submit" class="btn btn-primary">Шүүх</button>
+    </form>
+
+    {% if applications %}
+      <ul class="list-group">
+        {% for application in applications %}
+          {% set worker = application.worker %}
+          {% set profile = worker.worker_profile %}
+          <li class="list-group-item py-3">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <a class="fw-semibold" href="{{ url_for('admin.worker_detail', user_id=worker.id) }}">{{ worker.full_name }}</a>
+                <div class="small text-muted"><a href="tel:{{ worker.phone }}">{{ worker.phone }}</a>
+                  {% if not worker.is_active %}· <span class="text-danger">Идэвхгүй</span>{% endif %}</div>
+              </div>
+              {{ badge(application) }}
+            </div>
+            {% if profile %}
+              <div class="small mt-1">
+                <span class="badge text-bg-{{ profile.availability_badge }}">{{ profile.availability_label }}</span>
+                {{ profile.skills|map(attribute="name")|join(", ") }}
+              </div>
+              {% if profile.description %}<div class="small text-muted preserve-lines text-break">{{ profile.description }}</div>{% endif %}
+            {% endif %}
+            {% if worker.id in assigned_ids %}
+              <div class="small text-success mt-1">Энэ ажилд томилогдсон</div>
+            {% elif worker.id in busy_ids %}
+              <div class="small text-danger mt-1">Энэ цагт өөр ажилд томилогдсон</div>
+            {% endif %}
+
+            <div class="d-flex flex-wrap gap-2 mt-2">
+              {% if application.status == 'pending' %}
+                {% for decision, label, style in [('approved', 'Тэнцүүлэх', 'btn-success'), ('rejected', 'Татгалзах', 'btn-outline-secondary')] %}
+                  <form method="post" action="{{ url_for('admin.review', application_id=application.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="decision" value="{{ decision }}">
+                    <button type="submit" class="btn {{ style }}">{{ label }}</button>
+                  </form>
+                {% endfor %}
+              {% endif %}
+              {% if application.status in ('pending', 'approved') and worker.id not in assigned_ids
+                    and job.is_staffable and job.positions_remaining %}
+                <form method="post" action="{{ url_for('admin.create_assignment', job_id=job.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="worker_id" value="{{ worker.id }}">
+                  <input type="hidden" name="agreed_wage" value="{{ job.wage_per_worker }}">
+                  <input type="hidden" name="back_to" value="applications">
+                  <button type="submit" class="btn btn-primary">Томилох ({{ job.wage_per_worker|mnt }})</button>
+                </form>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">Өргөдөл алга.</p>
+    {% endif %}
+
+    <a class="btn btn-link px-0 mt-3" href="{{ url_for('admin.job_detail', job_id=job.id) }}">Хүсэлт рүү буцах</a>
+  </div>
+</div>
+{% endblock %}

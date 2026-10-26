@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Профайл засах{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4 mb-3">Профайл засах</h1>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+
+      <fieldset class="mb-4">
+        <legend class="form-label fs-6 fw-semibold">{{ form.skills.label.text }}</legend>
+        <p class="form-text mt-0">Хийж чадах бүх ажлаа сонгоно уу.</p>
+        {% for option in form.skills %}
+          <div class="form-check form-check-lg">
+            {{ option(class="form-check-input" + (" is-invalid" if form.skills.errors else "")) }}
+            {{ option.label(class="form-check-label") }}
+          </div>
+        {% endfor %}
+        {% for error in form.skills.errors %}
+          <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+      </fieldset>
+
+      <fieldset class="mb-4">
+        <legend class="form-label fs-6 fw-semibold">{{ form.availability.label.text }}</legend>
+        {% for option in form.availability %}
+          <div class="form-check form-check-lg">
+            {{ option(class="form-check-input" + (" is-invalid" if form.availability.errors else "")) }}
+            {{ option.label(class="form-check-label") }}
+          </div>
+        {% endfor %}
+        {% for error in form.availability.errors %}
+          <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+      </fieldset>
+
+      <div class="mb-4">
+        {{ form.description.label(class="form-label fw-semibold") }}
+        {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""),
+                            rows=4, maxlength=500,
+                            placeholder="Жишээ нь: 3 жил барилгад туслах ажил хийсэн.") }}
+        {% for error in form.description.errors %}
+          <div class="invalid-feedback">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">
+          500 тэмдэгт хүртэл. Ур чадвар, танилцуулга нь ажил олгогчдод харагдана.
+          Утасны дугаар, регистрийн дугаар, гэрийн хаяг зэрэг хувийн мэдээлэл бүү бичнэ үү.
+        </div>
+      </div>
+
+      <div class="d-grid gap-2">
+        {{ form.submit(class="btn btn-primary btn-lg") }}
+        <a class="btn btn-outline-secondary" href="{{ url_for('worker.index') }}">Буцах</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

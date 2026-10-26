@@ -1,0 +1,85 @@
+{# Job pieces shared by the employer and admin pages. #}
+{% macro status_badge(job) %}
+  <span class="badge text-bg-{{ job.status_badge }}">{{ job.status_label }}</span>
+{% endmacro %}
+
+{# One row in a list of jobs. #}
+{% macro job_list_item(job, url, show_employer=false) %}
+  <a class="list-group-item list-group-item-action py-3" href="{{ url }}">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <div class="fw-semibold">{{ job.title }}</div>
+      {{ status_badge(job) }}
+    </div>
+    <div class="small text-muted">
+      {{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }}
+    </div>
+    <div class="small">
+      {{ job.workers_needed }} ажилтан · <span class="text-nowrap">{{ job.wage_per_worker|mnt }}</span> / хүн
+      {% if show_employer %}· {{ job.employer.full_name }}{% endif %}
+    </div>
+  </a>
+{% endmacro %}
+
+{# Badge for anything with status_label / status_badge (applications, assignments). #}
+{% macro badge(item) %}
+  <span class="badge text-bg-{{ item.status_badge }}">{{ item.status_label }}</span>
+{% endmacro %}
+
+{# Full read-only details of a job request. Workers see it without totals or office data. #}
+{% macro job_details(job, for_worker=false) %}
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <dl class="row mb-0">
+        {% if for_worker %}
+          <dt class="col-5 col-sm-4">Ажил олгогч</dt>
+          <dd class="col-7 col-sm-8 text-break">{{ job.employer.employer_display_name }}</dd>
+        {% endif %}
+        <dt class="col-5 col-sm-4">Ажлын өдөр</dt>
+        <dd class="col-7 col-sm-8">{{ job.work_date|mn_date }}</dd>
+
+        <dt class="col-5 col-sm-4">Цаг</dt>
+        <dd class="col-7 col-sm-8">{{ job.start_time|hm }} – {{ job.end_time|hm }}</dd>
+
+        <dt class="col-5 col-sm-4">Байршил</dt>
+        <dd class="col-7 col-sm-8 text-break">{{ job.location }}</dd>
+
+        <dt class="col-5 col-sm-4">Ажилтны тоо</dt>
+        <dd class="col-7 col-sm-8">{{ job.workers_needed }}</dd>
+
+        <dt class="col-5 col-sm-4">Нэг хүний цалин</dt>
+        <dd class="col-7 col-sm-8 text-nowrap">{{ job.wage_per_worker|mnt }}</dd>
+
+        {% if not for_worker %}
+          <dt class="col-5 col-sm-4">Нийт цалин</dt>
+          <dd class="col-7 col-sm-8 text-nowrap fw-semibold">{{ job.total_wage|mnt }}</dd>
+        {% endif %}
+
+        <dt class="col-12 mt-2">Хийх ажил</dt>
+        <dd class="col-12 preserve-lines text-break">{{ job.description }}</dd>
+
+        {% if job.notes %}
+          <dt class="col-12">Нэмэлт тэмдэглэл</dt>
+          <dd class="col-12 preserve-lines text-break">{{ job.notes }}</dd>
+        {% endif %}
+
+        {% if not for_worker %}
+          <dt class="col-5 col-sm-4 text-muted small">Илгээсэн</dt>
+          <dd class="col-7 col-sm-8 text-muted small mb-0">{{ job.created_at|mn_datetime }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro status_history(job) %}
+  <h2 class="h6 mt-4">Төлөвийн түүх</h2>
+  <ul class="list-group list-group-flush small">
+    {% for change in job.status_changes %}
+      <li class="list-group-item px-0">
+        <div><span class="fw-semibold">{{ change.to_label }}</span> · {{ change.created_at|mn_datetime }}</div>
+        <div class="text-muted">{{ change.changed_by.full_name }}</div>
+        {% if change.note %}<div class="preserve-lines text-break">{{ change.note }}</div>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endmacro %}

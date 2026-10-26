@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_public_worker.html" import public_worker_card %}
+{% block title %}{{ worker.public_name }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    {{ public_worker_card(worker) }}
+    <p class="small text-muted mt-3">
+      Энэ ажилтныг ажилд авах бол <a href="{{ url_for('employer.new_job') }}">ажилтан захиалах хүсэлт</a> илгээнэ үү.
+      Томилолтыг товчоо хийнэ.
+    </p>
+    <a class="btn btn-link px-0" href="{{ url_for('employer.workers') }}">Ажилтнуудын жагсаалт руу буцах</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% from "_forms.html" import render_field %}
+{% from "_jobs.html" import job_details, status_badge, status_history %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+      <h1 class="h4 mb-0 text-break">{{ job.title }}</h1>
+      {{ status_badge(job) }}
+    </div>
+    <p class="text-muted">
+      Ажил олгогч: {{ job.employer.full_name }}{% if job.employer.company_name %} ({{ job.employer.company_name }}){% endif %} ·
+      <a href="tel:{{ job.employer.phone }}">{{ job.employer.phone }}</a>
+    </p>
+
+    {{ job_details(job) }}
+
+    {# --- assignments --- #}
+    <h2 class="h5 mt-4">Томилогдсон ажилтнууд
+      <span class="text-muted fs-6">({{ job.active_assignments|length }} / {{ job.workers_needed }},
+        үлдсэн {{ job.positions_remaining }})</span>
+    </h2>
+    {% if job.active_assignments %}
+      <ul class="list-group mb-3">
+        {% for assignment in job.active_assignments %}
+          <li class="list-group-item d-flex justify-content-between align-items-center gap-2 py-2">
+            <div>
+              <a class="fw-semibold" href="{{ url_for('admin.worker_detail', user_id=assignment.worker_id) }}">{{ assignment.worker.full_name }}</a>
+              <div class="small text-muted">
+                <a href="tel:{{ assignment.worker.phone }}">{{ assignment.worker.phone }}</a> ·
+                <span class="text-nowrap">{{ assignment.agreed_wage|mnt }}</span> ·
+                <span class="badge text-bg-{{ assignment.attendance_badge }}">{{ assignment.attendance_label }}</span>
+              </div>
+            </div>
+            {% if job.status != 'completed' %}
+              <form method="post" action="{{ url_for('admin.cancel_assignment_view', assignment_id=assignment.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Цуцлах</button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="small text-muted">Томилогдсон ажилтан алга.</p>
+    {% endif %}
+
+    {% if job.is_staffable and job.positions_remaining %}
+      <div class="card mb-3">
+        <div class="card-body">
+          <h3 class="h6">Ажилтан томилох</h3>
+          {% if candidates %}
+            <form method="post" action="{{ url_for('admin.create_assignment', job_id=job.id) }}" novalidate>
+              {{ assignment_form.hidden_tag() }}
+              <div class="mb-3">
+                <label class="form-label" for="worker_id">Ажилтан</label>
+                <select class="form-select{% if assignment_form.worker_id.errors %} is-invalid{% endif %}" id="worker_id" name="worker_id">
+                  {% for worker in candidates %}
+                    <option value="{{ worker.id }}">
+                      {{ worker.full_name }} · {{ worker.phone }}{% if worker.id in approved_ids %} · өргөдөл тэнцсэн{% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+                {% for error in assignment_form.worker_id.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+              </div>
+              {{ render_field(assignment_form.agreed_wage, inputmode="numeric") }}
+              {{ assignment_form.submit(class="btn btn-primary w-100") }}
+            </form>
+          {% else %}
+            <p class="small text-muted mb-0">Энэ цагт томилох боломжтой ажилтан алга
+              (идэвхтэй, ур чадвартай, «боломжтой» гэж тэмдэглэсэн, өөр ажилд давхцаагүй).</p>
+          {% endif %}
+        </div>
+      </div>
+    {% elif job.status == 'accepted' and not job.positions_remaining %}
+      <p class="small text-success">Бүх орон тоо дүүрсэн.</p>
+    {% endif %}
+
+    {% set cancelled_assignments = job.assignments|rejectattr("status", "equalto", "active")|list %}
+    {% if cancelled_assignments %}
+      <details class="small mb-3">
+        <summary>Цуцлагдсан томилолт ({{ cancelled_assignments|length }})</summary>
+        <ul class="list-unstyled mt-2">
+          {% for assignment in cancelled_assignments %}
+            <li class="text-muted">{{ assignment.worker.full_name }} · {{ assignment.cancelled_at|mn_datetime }}
+              · {{ assignment.cancelled_by.full_name }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% endif %}
+
+    <div class="d-grid gap-2">
+      {% if job.active_assignments and job.status in ('accepted', 'in_progress', 'completed') %}
+        <a class="btn btn-primary" href="{{ url_for('admin.job_attendance', job_id=job.id) }}">Ирц бүртгэх / харах</a>
+      {% endif %}
+      <a class="btn btn-outline-primary" href="{{ url_for('admin.job_applications', job_id=job.id) }}">
+        Өргөдлүүд: {{ application_counts['pending'] }} хянагдаж буй, {{ application_counts['approved'] }} тэнцсэн
+      </a>
+    </div>
+
+    {% if job.completed_change %}
+      <p class="small text-muted mt-3 mb-0">
+        Дууссан: {{ job.completed_change.created_at|mn_datetime }} · {{ job.completed_change.changed_by.full_name }}.
+        Төлбөр хараахан бүртгэгдээгүй.
+      </p>
+    {% endif %}
+
+    {% if job.next_statuses %}
+      <div class="card mt-4">
+        <div class="card-body">
+          <form method="post" action="{{ url_for('admin.change_job_status', job_id=job.id) }}" novalidate>
+            {{ form.hidden_tag() }}
+            {{ render_field(form.new_status, input_class="form-select") }}
+            {{ render_field(form.note, rows=2, maxlength=500) }}
+            {{ form.submit(class="btn btn-primary w-100") }}
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <p class="text-muted mt-4">Энэ хүсэлт эцсийн төлөвтэй тул төлөв өөрчлөх боломжгүй.</p>
+    {% endif %}
+
+    {{ status_history(job) }}
+
+    <a class="btn btn-link px-0 mt-3" href="{{ url_for('admin.jobs') }}">Хүсэлтүүдийн жагсаалт руу буцах</a>
+  </div>
+</div>
+{% endblock %}

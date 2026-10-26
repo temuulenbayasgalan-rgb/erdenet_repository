@@ -2,3 +2,23 @@
 body {
   background-color: #f8f9fa;
 }
+
+/* Bigger checkboxes and radio buttons that are easy to tap on a phone. */
+.form-check-lg {
+  padding: 0.5rem 0 0.5rem 2.25rem;
+  min-height: 2.75rem;
+}
+.form-check-lg .form-check-input {
+  width: 1.4rem;
+  height: 1.4rem;
+  margin-left: -2.25rem;
+}
+.form-check-lg .form-check-label {
+  padding-top: 0.1rem;
+}
+
+/* Keep the line breaks people typed into descriptions and notes. */
+.profile-description,
+.preserve-lines {
+  white-space: pre-line;
+}

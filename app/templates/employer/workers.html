@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_public_worker.html" import public_worker_card %}
+{% block title %}Ажилтнууд{% endblock %}
+{% block content %}
+<h1 class="h4 mb-2">Ажилтнууд <span class="text-muted fs-6">({{ workers|length }})</span></h1>
+<p class="small text-muted">
+  Ажил хийх боломжтой ажилтнуудын жагсаалт. Ажилтныг товчоо томилно — та хүсэлтээ илгээхэд хангалттай.
+</p>
+
+<form method="get" class="row g-2 align-items-end mb-3" novalidate>
+  <div class="col-12 col-md-4">
+    {{ form.skill.label(class="form-label small mb-1") }}
+    {{ form.skill(class="form-select" + (" is-invalid" if form.skill.errors else "")) }}
+  </div>
+  <div class="col-12 col-md-5">
+    {{ form.job.label(class="form-label small mb-1") }}
+    {{ form.job(class="form-select" + (" is-invalid" if form.job.errors else "")) }}
+  </div>
+  <div class="col-12 col-md-auto d-flex gap-2">
+    <button type="submit" class="btn btn-primary flex-fill">Шүүх</button>
+    <a class="btn btn-outline-secondary flex-fill" href="{{ url_for('employer.workers') }}">Цэвэрлэх</a>
+  </div>
+</form>
+
+{% if period_job %}
+  <p class="small">«{{ period_job.title }}» хүсэлтийн цагт ({{ period_job.work_date|mn_date }}
+    {{ period_job.start_time|hm }}–{{ period_job.end_time|hm }}) өөр ажилд томилогдоогүй ажилтнууд.</p>
+{% endif %}
+
+{% if workers %}
+  <div class="row row-cols-1 row-cols-md-2 g-3">
+    {% for worker in workers %}
+      <div class="col">{{ public_worker_card(worker, link=url_for('employer.worker_profile', user_id=worker.id)) }}</div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-muted">Шүүлтүүрт тохирох ажилтан олдсонгүй.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_worker_profile.html" import profile_card %}
+{% block title %}Ажилтны самбар{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4">Сайн байна уу, {{ current_user.full_name }}</h1>
+    <p class="text-muted">{{ current_user.phone }}</p>
+
+    {% if not profile.skills %}
+      <div class="alert alert-info">
+        Ажилд томилогдохын тулд профайлаа бөглөж, ур чадвараа сонгоно уу.
+      </div>
+    {% endif %}
+
+    {{ profile_card(profile) }}
+
+    <div class="d-grid gap-2 mt-3">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('worker.jobs') }}">Ажлын зар</a>
+      <a class="btn btn-outline-primary" href="{{ url_for('worker.applications') }}">Миний өргөдлүүд</a>
+      <a class="btn btn-outline-primary" href="{{ url_for('worker.assignments') }}">Миний ажил</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('worker.edit_profile') }}">Профайл засах</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

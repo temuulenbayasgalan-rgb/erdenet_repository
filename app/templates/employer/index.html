@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import job_list_item %}
+{% block title %}Ажил олгогчийн самбар{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4">Сайн байна уу, {{ current_user.full_name }}</h1>
+    <p class="small text-muted mb-0">
+      Ажилтнуудад харагдах нэр: <span class="fw-semibold">{{ current_user.employer_display_name }}</span>
+      · <a href="{{ url_for('employer.profile') }}">засах</a>
+    </p>
+
+    <div class="d-grid gap-2 my-3">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('employer.new_job') }}">+ Ажилтан захиалах</a>
+      <a class="btn btn-outline-primary" href="{{ url_for('employer.workers') }}">Ажилтнуудыг харах</a>
+    </div>
+
+    <h2 class="h5">Миний хүсэлтүүд</h2>
+    {% if jobs %}
+      <div class="list-group">
+        {% for job in jobs %}
+          {{ job_list_item(job, url_for('employer.job_detail', job_id=job.id)) }}
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted">Та одоогоор хүсэлт илгээгээгүй байна.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

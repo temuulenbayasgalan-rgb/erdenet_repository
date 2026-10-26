@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Ажилтнууд{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Ажилтнууд <span class="text-muted fs-6">({{ workers|length }})</span></h1>
+
+{% if workers %}
+  <div class="list-group">
+    {% for worker in workers %}
+      {% set profile = worker.worker_profile %}
+      <a class="list-group-item list-group-item-action py-3"
+         href="{{ url_for('admin.worker_detail', user_id=worker.id) }}">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <div class="fw-semibold">{{ worker.full_name }}</div>
+            <div class="small text-muted">{{ worker.phone }}{% if not worker.is_active %} · Идэвхгүй{% endif %}</div>
+          </div>
+          {% if profile %}
+            <span class="badge text-bg-{{ profile.availability_badge }}">{{ profile.availability_label }}</span>
+          {% else %}
+            <span class="badge text-bg-light border">Профайлгүй</span>
+          {% endif %}
+        </div>
+        {% if profile and profile.skills %}
+          <div class="small mt-1">{{ profile.skills|map(attribute="name")|join(", ") }}</div>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-muted">Бүртгэлтэй ажилтан алга.</p>
+{% endif %}
+
+<a class="btn btn-link px-0 mt-3" href="{{ url_for('admin.index') }}">Админ самбар руу буцах</a>
+{% endblock %}

@@ -1,0 +1,17 @@
+{# Renders one WTForms field with a Bootstrap label and error messages. #}
+{% macro render_field(field, input_class="form-control") %}
+  <div class="mb-3">
+    {{ field.label(class="form-label") }}
+    {{ field(class=input_class + (" is-invalid" if field.errors else ""), **kwargs) }}
+    {% for error in field.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% macro render_checkbox(field) %}
+  <div class="form-check mb-3">
+    {{ field(class="form-check-input") }}
+    {{ field.label(class="form-check-label") }}
+  </div>
+{% endmacro %}

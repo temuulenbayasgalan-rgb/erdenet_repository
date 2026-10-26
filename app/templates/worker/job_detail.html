@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import badge, job_details %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4 mb-3 text-break">{{ job.title }}</h1>
+
+    {% if assignment %}
+      <div class="alert alert-success">Та энэ ажилд томилогдсон. Цалин: {{ assignment.agreed_wage|mnt }}</div>
+    {% elif application and application.status != 'withdrawn' %}
+      <div class="alert alert-light border">Таны өргөдөл: {{ badge(application) }}</div>
+    {% endif %}
+
+    {{ job_details(job, for_worker=true) }}
+
+    {% if can_apply %}
+      <form method="post" action="{{ url_for('worker.apply', job_id=job.id) }}" class="mt-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-lg w-100">Өргөдөл гаргах</button>
+        <p class="small text-muted mt-2 mb-0">Өргөдөл гаргах нь томилогдсон гэсэн үг биш. Товчоо сонгоод мэдэгдэнэ.</p>
+      </form>
+    {% elif not assignment and not job.accepting_applications %}
+      <p class="text-muted mt-4">Энэ ажилд өргөдөл авахаа больсон.</p>
+    {% endif %}
+
+    <a class="btn btn-link px-0 mt-3" href="{{ url_for('worker.jobs') }}">Ажлын зар руу буцах</a>
+  </div>
+</div>
+{% endblock %}

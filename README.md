@@ -17,6 +17,20 @@ copy .env.example .env      # then put a real SECRET_KEY in .env
 If you don't want to change the execution policy, skip activation and call the venv's Python directly:
 `.\.venv\Scripts\python.exe -m pytest`.
 
+## Database
+
+```powershell
+flask --app app db upgrade        # create/update tables in instance/erdenet_ajil.sqlite3
+flask --app app create-admin      # asks for phone, name and password (hidden)
+```
+
+After changing `app/models.py`:
+
+```powershell
+flask --app app db migrate -m "describe the change"   # then review the file in migrations/versions/
+flask --app app db upgrade
+```
+
 ## Run
 
 ```powershell

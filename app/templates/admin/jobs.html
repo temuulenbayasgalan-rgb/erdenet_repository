@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import job_list_item %}
+{% block title %}Ажлын хүсэлтүүд{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Ажлын хүсэлтүүд <span class="text-muted fs-6">({{ jobs|length }})</span></h1>
+
+<form method="get" class="row g-2 align-items-end mb-3" novalidate>
+  <div class="col-6 col-md-3">
+    {{ form.status.label(class="form-label small mb-1") }}
+    {{ form.status(class="form-select" + (" is-invalid" if form.status.errors else "")) }}
+  </div>
+  <div class="col-6 col-md-3">
+    {{ form.work_date.label(class="form-label small mb-1") }}
+    {{ form.work_date(class="form-control" + (" is-invalid" if form.work_date.errors else "")) }}
+  </div>
+  <div class="col-12 col-md-auto d-flex gap-2">
+    <button type="submit" class="btn btn-primary flex-fill">Шүүх</button>
+    <a class="btn btn-outline-secondary flex-fill" href="{{ url_for('admin.jobs') }}">Цэвэрлэх</a>
+  </div>
+</form>
+
+{% if jobs %}
+  <div class="list-group">
+    {% for job in jobs %}
+      {{ job_list_item(job, url_for('admin.job_detail', job_id=job.id), show_employer=true) }}
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-muted">Хүсэлт олдсонгүй.</p>
+{% endif %}
+
+<a class="btn btn-link px-0 mt-3" href="{{ url_for('admin.index') }}">Админ самбар руу буцах</a>
+{% endblock %}

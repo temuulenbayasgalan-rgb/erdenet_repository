@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_forms.html" import render_field %}
+{% block title %}Байгууллагын нэр{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4 mb-3">Байгууллагын нэр</h1>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+      {{ render_field(form.company_name, autocomplete="organization", maxlength=100) }}
+      <p class="form-text mt-n2 mb-3">{{ form.company_name.description }}</p>
+      <div class="d-grid gap-2">
+        {{ form.submit(class="btn btn-primary btn-lg") }}
+        <a class="btn btn-outline-secondary" href="{{ url_for('employer.index') }}">Буцах</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

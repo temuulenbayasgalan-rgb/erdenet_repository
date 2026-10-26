@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import status_badge %}
+{% block title %}Ирц · {{ job.title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+      <h1 class="h4 mb-0 text-break">Ирц: {{ job.title }}</h1>
+      {{ status_badge(job) }}
+    </div>
+    <p class="text-muted small">{{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }} · {{ job.location }}</p>
+
+    {% if not job.attendance_open %}
+      <div class="alert alert-secondary">
+        {% if job.status in ('completed', 'cancelled') %}
+          Энэ ажил {{ job.status_label|lower }} тул ирцийг өөрчлөх боломжгүй.
+        {% else %}
+          Ирцийг ажлын өдрөөс ({{ job.work_date|mn_date }}) эхлэн бүртгэнэ.
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if job.active_assignments %}
+      <ul class="list-group">
+        {% for assignment in job.active_assignments %}
+          {% set last = assignment.last_attendance_change %}
+          <li class="list-group-item py-3">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <div class="fw-semibold">{{ assignment.worker.full_name }}</div>
+                <div class="small text-muted"><a href="tel:{{ assignment.worker.phone }}">{{ assignment.worker.phone }}</a></div>
+              </div>
+              <span class="badge text-bg-{{ assignment.attendance_badge }} fs-6">{{ assignment.attendance_label }}</span>
+            </div>
+            {% if last %}
+              <div class="small text-muted mt-1">Сүүлд: {{ last.changed_by.full_name }} · {{ last.created_at|mn_datetime }}</div>
+            {% endif %}
+
+            {% if job.attendance_open %}
+              <div class="row g-2 mt-1">
+                {% for status in recordable %}
+                  <div class="col-4">
+                    <form method="post" action="{{ url_for('admin.set_attendance', assignment_id=assignment.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="attendance" value="{{ status }}">
+                      <button type="submit"
+                              class="btn w-100 py-2 {% if assignment.attendance == status %}btn-dark{% else %}btn-outline-dark{% endif %}"
+                              {% if assignment.attendance == status %}aria-pressed="true"{% endif %}>
+                        {{ attendance_labels[status] }}
+                      </button>
+                    </form>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            {% if assignment.attendance_changes|length > 1 %}
+              <details class="small mt-2">
+                <summary>Өөрчлөлтийн түүх ({{ assignment.attendance_changes|length }})</summary>
+                <ul class="list-unstyled mb-0 mt-1">
+                  {% for change in assignment.attendance_changes %}
+                    <li class="text-muted">{{ change.created_at|mn_datetime }} · {{ change.to_label }} · {{ change.changed_by.full_name }}</li>
+                  {% endfor %}
+                </ul>
+              </details>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">Энэ ажилд томилогдсон ажилтан алга.</p>
+    {% endif %}
+
+    {% if completion_problem %}
+      <div class="alert alert-warning mt-3 mb-0">Ажлыг дуусгахын өмнө: {{ completion_problem }}</div>
+    {% elif job.status == 'in_progress' %}
+      <div class="alert alert-success mt-3 mb-0">Ирц бүрэн. Ажлыг «Дууссан» болгож болно.</div>
+    {% endif %}
+
+    <a class="btn btn-link px-0 mt-3" href="{{ url_for('admin.job_detail', job_id=job.id) }}">Хүсэлт рүү буцах</a>
+  </div>
+</div>
+{% endblock %}

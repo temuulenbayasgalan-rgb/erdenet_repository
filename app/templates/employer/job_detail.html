@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import job_details, status_badge, status_history %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+      <h1 class="h4 mb-0 text-break">{{ job.title }}</h1>
+      {{ status_badge(job) }}
+    </div>
+
+    {{ job_details(job) }}
+
+    <h2 class="h6 mt-4">Томилогдсон ажилтнууд
+      <span class="text-muted fw-normal">({{ job.active_assignments|length }} / {{ job.workers_needed }})</span>
+    </h2>
+    {% if job.active_assignments %}
+      <ul class="list-group">
+        {% for assignment in job.active_assignments %}
+          <li class="list-group-item">
+            <div class="fw-semibold">{{ assignment.worker.public_name }}</div>
+            <div class="small text-muted">
+              {{ assignment.worker.worker_profile.skills|map(attribute="name")|join(", ") }}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="small text-muted">Товчоо ажилтан томилоогүй байна.</p>
+    {% endif %}
+
+    {{ status_history(job) }}
+
+    {% if job.employer_can_cancel %}
+      <form method="post" action="{{ url_for('employer.cancel_job', job_id=job.id) }}" class="mt-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p class="small text-muted mb-2">Товчоо зөвшөөрөхөөс өмнө хүсэлтээ цуцлах боломжтой.</p>
+        <button type="submit" class="btn btn-outline-danger w-100">Хүсэлт цуцлах</button>
+      </form>
+    {% elif job.next_statuses %}
+      <p class="small text-muted mt-4">Өөрчлөлт оруулах бол товчоотой утсаар холбогдоно уу.</p>
+    {% endif %}
+
+    <a class="btn btn-link px-0 mt-3" href="{{ url_for('employer.index') }}">Миний хүсэлтүүд рүү буцах</a>
+  </div>
+</div>
+{% endblock %}

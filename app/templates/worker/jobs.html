@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import badge %}
+{% block title %}Ажлын зар{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4 mb-3">Ажлын зар</h1>
+
+    {% if not profile.skills %}
+      <div class="alert alert-info">
+        Өргөдөл гаргахын өмнө <a href="{{ url_for('worker.edit_profile') }}">профайлдаа</a> ур чадвараа сонгоно уу.
+      </div>
+    {% elif profile.availability != 'available' %}
+      <div class="alert alert-warning">
+        Таны профайлд «{{ profile.availability_label }}» гэж тэмдэглэгдсэн тул өргөдөл гаргах боломжгүй.
+      </div>
+    {% endif %}
+
+    {% if jobs %}
+      <div class="list-group">
+        {% for job in jobs %}
+          {% set application = applications.get(job.id) %}
+          <a class="list-group-item list-group-item-action py-3" href="{{ url_for('worker.job_detail', job_id=job.id) }}">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="fw-semibold text-break">{{ job.title }}</div>
+              {% if application %}{{ badge(application) }}{% endif %}
+            </div>
+            <div class="small text-muted">{{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }}</div>
+            <div class="small text-break">{{ job.employer.employer_display_name }} · {{ job.location }}</div>
+            <div class="small fw-semibold"><span class="text-nowrap">{{ job.wage_per_worker|mnt }}</span>
+              · {{ job.positions_remaining }} хүн дутуу</div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted">Одоогоор нээлттэй ажлын зар алга.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

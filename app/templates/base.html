@@ -16,8 +16,44 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="mainNav">
-        <ul class="navbar-nav ms-auto">
-          {% block nav_items %}{% endblock %}
+        <ul class="navbar-nav ms-auto align-items-md-center">
+          {% if current_user.is_authenticated %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for(current_user.dashboard_endpoint) }}">Миний самбар</a>
+            </li>
+            {% if current_user.role == 'worker' %}
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('worker.jobs') }}">Ажлын зар</a></li>
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('worker.applications') }}">Өргөдлүүд</a></li>
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('worker.assignments') }}">Миний ажил</a></li>
+            {% elif current_user.role == 'employer' %}
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('employer.new_job') }}">Ажилтан захиалах</a></li>
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('employer.workers') }}">Ажилтнууд</a></li>
+            {% elif current_user.role == 'admin' %}
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.jobs') }}">Хүсэлтүүд</a></li>
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.workers') }}">Ажилтнууд</a></li>
+            {% endif %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('notifications.index') }}">
+                Мэдэгдэл
+                {% if unread_notification_count %}
+                  <span class="badge text-bg-danger" aria-label="уншаагүй">{{ unread_notification_count }}</span>
+                {% endif %}
+              </a>
+            </li>
+            <li class="nav-item">
+              <span class="navbar-text px-md-2">{{ current_user.full_name }} ({{ current_user.role_label }})</span>
+            </li>
+            <li class="nav-item">
+              <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-link nav-link">Гарах</button>
+              </form>
+            </li>
+          {% else %}
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.login') }}">Нэвтрэх</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.register_worker') }}">Ажилтнаар бүртгүүлэх</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.register_employer') }}">Ажил олгогчоор бүртгүүлэх</a></li>
+          {% endif %}
         </ul>
       </div>
     </div>
@@ -33,5 +69,21 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Stop double taps from sending a POST form twice. The server rejects duplicates
+    // anyway; this just avoids confusing error messages.
+    document.addEventListener("submit", function (event) {
+      var form = event.target;
+      if ((form.method || "").toLowerCase() !== "post") return;
+      // Disable after the browser has read the button's value.
+      setTimeout(function () {
+        form.querySelectorAll('[type="submit"]').forEach(function (button) { button.disabled = true; });
+      }, 0);
+    });
+    // Re-enable when the page is shown again from the back/forward cache.
+    window.addEventListener("pageshow", function () {
+      document.querySelectorAll('form [type="submit"]').forEach(function (button) { button.disabled = false; });
+    });
+  </script>
 </body>
 </html>

@@ -1,0 +1,22 @@
+{# The only worker information employers ever see. Never add phone, address or account data here. #}
+{% macro public_worker_card(worker, link=none) %}
+  {% set profile = worker.worker_profile %}
+  <div class="card shadow-sm h-100">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <h2 class="h6 mb-2">
+          {% if link %}<a href="{{ link }}">{{ worker.public_name }}</a>{% else %}{{ worker.public_name }}{% endif %}
+        </h2>
+        <span class="badge text-bg-{{ profile.availability_badge }}">{{ profile.availability_label }}</span>
+      </div>
+      <ul class="list-unstyled d-flex flex-wrap gap-1 mb-2">
+        {% for skill in profile.skills if skill.is_active %}
+          <li><span class="badge rounded-pill text-bg-light border fw-normal">{{ skill.name }}</span></li>
+        {% endfor %}
+      </ul>
+      {% if profile.description %}
+        <p class="small mb-0 preserve-lines text-break">{{ profile.description }}</p>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Админ самбар{% endblock %}
+{% block content %}
+<h1 class="h4">Админ самбар</h1>
+<p>Сайн байна уу, {{ current_user.full_name }}.</p>
+<div class="d-grid gap-2 col-md-6">
+  <a class="btn btn-primary" href="{{ url_for('admin.jobs', status='pending') }}">
+    Шинэ хүсэлтүүд <span class="badge text-bg-light">{{ pending_count }}</span>
+  </a>
+  <a class="btn btn-outline-primary" href="{{ url_for('admin.jobs') }}">Бүх ажлын хүсэлт</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('admin.workers') }}">Ажилтнууд</a>
+</div>
+<p class="text-muted mt-3">Ажилтан томилох, төлбөрийн удирдлага дараагийн шатуудад нэмэгдэнэ.</p>
+{% endblock %}

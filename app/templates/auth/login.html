@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_forms.html" import render_field, render_checkbox %}
+{% block title %}Нэвтрэх{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-4">
+    <h1 class="h4 mb-3">Нэвтрэх</h1>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+      {{ render_field(form.phone, inputmode="numeric", autocomplete="tel", placeholder="99112233") }}
+      {{ render_field(form.password, autocomplete="current-password") }}
+      {{ render_checkbox(form.remember) }}
+      {{ form.submit(class="btn btn-primary w-100") }}
+    </form>
+    <p class="mt-3 small">
+      Бүртгэлгүй юу?
+      <a href="{{ url_for('auth.register_worker') }}">Ажилтнаар</a> эсвэл
+      <a href="{{ url_for('auth.register_employer') }}">ажил олгогчоор</a> бүртгүүлээрэй.
+    </p>
+  </div>
+</div>
+{% endblock %}

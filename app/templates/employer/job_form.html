@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_forms.html" import render_field %}
+{% block title %}Ажилтан захиалах{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4 mb-2">Ажилтан захиалах</h1>
+    <p class="small text-muted">
+      Товчоо зөвшөөрсний дараа ажлын төрөл, тайлбар, байршил, цаг, цалин, тэмдэглэл нь ажилтнуудад харагдана.
+      Утасны дугаар зэрэг хувийн мэдээлэл бүү бичнэ үү.
+    </p>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+      {{ render_field(form.title, maxlength=100, placeholder="Жишээ нь: Ачаа буулгах") }}
+      {{ render_field(form.description, rows=3, maxlength=1000,
+                      placeholder="Жишээ нь: Ачааны машинаас 200 шуудай цемент буулгана.") }}
+      {{ render_field(form.location, maxlength=200, placeholder="Жишээ нь: Баян-Өндөр, 5-р баг, ... байр") }}
+      {{ render_field(form.work_date, min=min_date, max=max_date) }}
+
+      <div class="row g-2">
+        <div class="col-6">{{ render_field(form.start_time) }}</div>
+        <div class="col-6">{{ render_field(form.end_time) }}</div>
+      </div>
+
+      <div class="row g-2">
+        <div class="col-5">{{ render_field(form.workers_needed, min=1, max=50, inputmode="numeric") }}</div>
+        <div class="col-7">{{ render_field(form.wage_per_worker, inputmode="numeric", placeholder="80000") }}</div>
+      </div>
+      <p class="form-text mt-n2 mb-3">Цалин нь нэг ажилтанд тухайн ажлын өдөрт олгох нийт дүн.</p>
+
+      {{ render_field(form.notes, rows=2, maxlength=500,
+                      placeholder="Жишээ нь: Ажлын хувцастай ирэх. Хоол өгнө.") }}
+
+      <div class="d-grid gap-2">
+        {{ form.submit(class="btn btn-primary btn-lg") }}
+        <a class="btn btn-outline-secondary" href="{{ url_for('employer.index') }}">Буцах</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
