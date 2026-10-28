@@ -4,27 +4,35 @@ from sqlalchemy.orm import selectinload
 
 from app.admin import bp
 from app.admin.forms import (
-    ApplicationFilterForm,
-    ApplicationReviewForm,
+    ApplicationInboxFilterForm,
     AssignmentForm,
     AttendanceForm,
+    CancelPlacementForm,
+    DisputeForm,
     JobFilterForm,
     JobStatusForm,
+    RejectApplicationForm,
+    ResolveDisputeForm,
 )
 from app.extensions import db
 from app.models import (
     ApplicationStatus,
     Assignment,
+    AttendanceDispute,
     AttendanceStatus,
+    DisputeStatus,
     Job,
     JobApplication,
     JobStatus,
     Role,
     User,
 )
-from app.security import role_required
+from app.security import is_safe_redirect, role_required
 from app.services import ServiceError
+from app.services import applications as application_service
+from app.services import disputes as dispute_service
 from app.services.attendance import record_attendance
+from app.services.finance import FinanceState, finance_state
 from app.services import jobs as job_service
 from app.services.staffing import (
     StaffingError,
@@ -32,8 +40,8 @@ from app.services.staffing import (
     cancel_assignment,
     eligible_workers_query,
     has_overlapping_assignment,
-    review_application,
 )
+from app.validation import office_today
 
 
 @bp.route("/")
@@ -42,7 +50,14 @@ def index():
     pending_count = db.session.scalar(
         db.select(db.func.count(Job.id)).filter_by(status=JobStatus.PENDING)
     )
-    return render_template("admin/index.html", pending_count=pending_count)
+    pending_applications = db.session.scalar(
+        db.select(db.func.count(JobApplication.id)).filter_by(status=ApplicationStatus.PENDING)
+    )
+    open_disputes = db.session.scalar(
+        db.select(db.func.count(AttendanceDispute.id)).filter_by(status=DisputeStatus.OPEN)
+    )
+    return render_template("admin/index.html", pending_count=pending_count,
+                           pending_applications=pending_applications, open_disputes=open_disputes)
 
 
 @bp.route("/workers")
@@ -99,22 +114,21 @@ def _render_job_detail(job, status_form=None, assignment_form=None, code=200):
     candidates = []
     if job.is_staffable and job.positions_remaining:
         candidates = db.session.scalars(eligible_workers_query(free_during=job)).all()
-    approved_ids = {
-        a.worker_id for a in job.applications if a.status == ApplicationStatus.APPROVED
-    }
-    # Applicants the office approved are listed first.
-    candidates.sort(key=lambda worker: worker.id not in approved_ids)
-    application_counts = {status: 0 for status in ApplicationStatus.ALL}
-    for application in job.applications:
-        application_counts[application.status] += 1
+    pending_ids = {a.worker_id for a in job.pending_applications}
+    # Workers who applied are listed first.
+    candidates.sort(key=lambda worker: worker.id not in pending_ids)
+    application_counts = application_service.counts_by_status(job)
+    state = finance_state(job)
     return render_template(
         "admin/job_detail.html",
+        finance_state_label=FinanceState.LABELS[state] if state else None,
         job=job,
         form=status_form or JobStatusForm(job),
         assignment_form=assignment_form,
         candidates=candidates,
-        approved_ids=approved_ids,
+        pending_ids=pending_ids,
         application_counts=application_counts,
+        cancel_form=CancelPlacementForm(formdata=None),
     ), code
 
 
@@ -152,6 +166,7 @@ def job_attendance(job_id):
         "admin/job_attendance.html", job=job, recordable=AttendanceStatus.RECORDABLE,
         attendance_labels=AttendanceStatus.LABELS,
         completion_problem=job.completion_problem() if job.status == JobStatus.IN_PROGRESS else None,
+        can_report=job.status in dispute_service.OPEN_JOB_STATUSES and job.work_date <= office_today(),
     )
 
 
@@ -175,53 +190,98 @@ def set_attendance(assignment_id):
     return redirect(url_for("admin.job_attendance", job_id=job_id))
 
 
-# --- applications --------------------------------------------------------------------
+# --- applications ---------------------------------------------------------------------
+
+def _back(default):
+    """Return to the page the form came from (a path on this site only)."""
+    target = request.form.get("back")
+    return redirect(target if is_safe_redirect(target) else default)
+
+
+@bp.route("/applications")
+@role_required(Role.ADMIN)
+def applications():
+    """The office inbox: applications grouped by job, pending first by default."""
+    jobs_with_applications = db.session.scalars(
+        db.select(Job).where(Job.applications.any()).order_by(Job.work_date.desc(), Job.id.desc())
+    ).all()
+    form = ApplicationInboxFilterForm(jobs_with_applications, formdata=request.args or None)
+    if request.args and not form.validate():
+        flash("Шүүлтүүрийн утга буруу байна. Хянагдаж буй хүсэлтүүдийг харуулж байна.", "warning")
+        form = ApplicationInboxFilterForm(jobs_with_applications, formdata=None)
+    query = (
+        db.select(JobApplication)
+        .join(JobApplication.job)
+        .options(
+            selectinload(JobApplication.worker).selectinload(User.worker_profile),
+            selectinload(JobApplication.changes),
+        )
+        .order_by(Job.work_date, Job.start_time, Job.id, JobApplication.created_at, JobApplication.id)
+    )
+    if form.job.data:
+        query = query.where(JobApplication.job_id == int(form.job.data))
+    if form.status.data:
+        query = query.where(JobApplication.status == form.status.data)
+
+    groups = {}
+    for application in db.session.scalars(query):
+        groups.setdefault(application.job, []).append(application)
+    busy = {
+        application.id
+        for job, items in groups.items() for application in items
+        if application.status == ApplicationStatus.PENDING
+        and has_overlapping_assignment(application.worker_id, job)
+    }
+    open_disputes = db.session.scalar(
+        db.select(db.func.count(AttendanceDispute.id)).filter_by(status=DisputeStatus.OPEN))
+    return render_template(
+        "admin/applications.html", form=form, groups=groups, busy=busy,
+        reject_form=RejectApplicationForm(formdata=None), open_disputes=open_disputes,
+        back=request.full_path.rstrip("?"),
+    )
+
 
 @bp.route("/jobs/<int:job_id>/applications")
 @role_required(Role.ADMIN)
 def job_applications(job_id):
     job = _job_or_404(job_id)
-    form = ApplicationFilterForm(formdata=request.args)
-    query = (
-        db.select(JobApplication)
-        .filter_by(job_id=job.id)
-        .options(selectinload(JobApplication.worker).selectinload(User.worker_profile))
-        .order_by(JobApplication.created_at, JobApplication.id)
-    )
-    if request.args and not form.validate():
-        flash("Шүүлтүүрийн утга буруу байна. Бүх өргөдлийг харуулж байна.", "warning")
-    elif form.status.data:
-        query = query.filter_by(status=form.status.data)
-    applications = db.session.scalars(query).all()
-
-    assigned_ids = {a.worker_id for a in job.active_assignments}
-    busy_ids = {
-        a.worker_id for a in applications
-        if a.worker_id not in assigned_ids and has_overlapping_assignment(a.worker_id, job)
-    }
-    return render_template(
-        "admin/job_applications.html", job=job, form=form, applications=applications,
-        assigned_ids=assigned_ids, busy_ids=busy_ids,
-    )
+    return redirect(url_for("admin.applications", job=job.id, status=""))
 
 
-@bp.route("/applications/<int:application_id>/review", methods=["POST"])
+@bp.route("/applications/<int:application_id>/accept", methods=["POST"])
 @role_required(Role.ADMIN)
-def review(application_id):
+def accept_application(application_id):
     application = db.session.get(JobApplication, application_id)
     if application is None:
         abort(404)
-    form = ApplicationReviewForm()
-    if not form.validate_on_submit():
-        flash("Шийдвэр буруу байна.", "danger")
+    default = url_for("admin.applications", job=application.job_id)
+    try:
+        assignment = application_service.accept(application.id, current_user.id)
+    except StaffingError as error:
+        flash(f"Баталгаажсангүй: {error}", "danger")
     else:
-        try:
-            review_application(application, form.decision.data, current_user)
-        except StaffingError as error:
-            flash(str(error), "danger")
-        else:
-            flash(f"Өргөдөл «{application.status_label}» боллоо.", "success")
-    return redirect(url_for("admin.job_applications", job_id=application.job_id))
+        flash(f"{assignment.worker.full_name} баталгаажлаа (томилогдлоо). Ажилтанд мэдэгдэл очлоо.", "success")
+    return _back(default)
+
+
+@bp.route("/applications/<int:application_id>/reject", methods=["POST"])
+@role_required(Role.ADMIN)
+def reject_application(application_id):
+    application = db.session.get(JobApplication, application_id)
+    if application is None:
+        abort(404)
+    default = url_for("admin.applications", job=application.job_id)
+    form = RejectApplicationForm()
+    if not form.validate_on_submit():
+        flash("Татгалзсангүй: " + " ".join(form.reason.errors or ["маягт буруу байна."]), "danger")
+        return _back(default)
+    try:
+        application_service.reject(application.id, current_user.id, form.reason.data or "")
+    except StaffingError as error:
+        flash(f"Татгалзсангүй: {error}", "danger")
+    else:
+        flash("Хүсэлтийг татгалзлаа. Ажилтанд мэдэгдэл очлоо.", "info")
+    return _back(default)
 
 
 # --- assignments ----------------------------------------------------------------------
@@ -253,10 +313,58 @@ def cancel_assignment_view(assignment_id):
     assignment = db.session.get(Assignment, assignment_id)
     if assignment is None:
         abort(404)
+    job_id = assignment.job_id
+    form = CancelPlacementForm()
+    if not form.validate_on_submit():
+        flash("Томилолт цуцлагдсангүй: " + " ".join(form.reason.errors or ["маягт буруу байна."]), "danger")
+        return redirect(url_for("admin.job_detail", job_id=job_id))
     try:
-        cancel_assignment(assignment, current_user)
+        cancel_assignment(assignment, current_user, form.reason.data)
     except StaffingError as error:
         flash(str(error), "danger")
     else:
-        flash("Томилолт цуцлагдлаа.", "info")
-    return redirect(url_for("admin.job_detail", job_id=assignment.job_id))
+        flash("Томилолт цуцлагдлаа. Орон тоо чөлөөлөгдлөө.", "info")
+    return redirect(url_for("admin.job_detail", job_id=job_id))
+
+
+# --- disputes -------------------------------------------------------------------------
+
+@bp.route("/assignments/<int:assignment_id>/disputes", methods=["POST"])
+@role_required(Role.ADMIN)
+def raise_dispute(assignment_id):
+    """The office records a disagreement, e.g. a supervisor phoned about attendance."""
+    assignment = db.session.get(Assignment, assignment_id)
+    if assignment is None:
+        abort(404)
+    job_id = assignment.job_id
+    form = DisputeForm()
+    if not form.validate_on_submit():
+        flash("Гомдол бүртгэгдсэнгүй: " + " ".join(form.message.errors or ["маягт буруу байна."]), "danger")
+    else:
+        try:
+            dispute_service.raise_dispute(assignment.id, current_user.id, form.message.data)
+        except ServiceError as error:
+            flash(str(error), "danger")
+        else:
+            flash("Гомдол бүртгэгдлээ.", "success")
+    return redirect(url_for("admin.job_attendance", job_id=job_id))
+
+
+@bp.route("/disputes/<int:dispute_id>/resolve", methods=["POST"])
+@role_required(Role.ADMIN)
+def resolve_dispute(dispute_id):
+    dispute = db.session.get(AttendanceDispute, dispute_id)
+    if dispute is None:
+        abort(404)
+    job_id = dispute.assignment.job_id
+    form = ResolveDisputeForm()
+    if not form.validate_on_submit():
+        flash("Шийдвэрлэгдсэнгүй: " + " ".join(form.resolution.errors or ["маягт буруу байна."]), "danger")
+    else:
+        try:
+            dispute_service.resolve_dispute(dispute.id, current_user.id, form.resolution.data)
+        except ServiceError as error:
+            flash(str(error), "danger")
+        else:
+            flash("Гомдол шийдвэрлэгдлээ. Холбогдох хүмүүст мэдэгдэл очлоо.", "success")
+    return redirect(url_for("admin.job_attendance", job_id=job_id))

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_jobs.html" import badge, job_details %}
+{% from "_office.html" import call_office_button with context %}
 {% block title %}{{ job.title }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -7,21 +8,95 @@
     <h1 class="h4 mb-3 text-break">{{ job.title }}</h1>
 
     {% if assignment %}
-      <div class="alert alert-success">Та энэ ажилд томилогдсон. Цалин: {{ assignment.agreed_wage|mnt }}</div>
+      {# Confirmed placement: only this worker, logged in, with an active assignment sees this. #}
+      {% set listing = job.listing %}
+      <section class="card border-success mb-3 confirmed-placement"><div class="card-body">
+        <h2 class="h5 text-success">✓ Ажил баталгаажсан</h2>
+        <dl class="row mb-0">
+          <dt class="col-5">Огноо</dt><dd class="col-7 fw-semibold">{{ job.work_date|mn_date }}</dd>
+          <dt class="col-5">Цаг</dt><dd class="col-7 fw-semibold">{{ job.start_time|hm }} – {{ job.end_time|hm }}</dd>
+          <dt class="col-5">Таны цалин</dt><dd class="col-7 fw-semibold text-nowrap">{{ assignment.agreed_wage|mnt }}</dd>
+          <dt class="col-5">Яг хаяг</dt><dd class="col-7 text-break">{{ job.location }}</dd>
+          <dt class="col-5">Хянагч</dt>
+          <dd class="col-7 text-break">
+            {% if listing and (listing.supervisor_name or listing.supervisor_phone) %}
+              {{ listing.supervisor_name or "" }}
+              {% if listing.supervisor_phone %}<a class="d-block" href="tel:{{ listing.supervisor_phone }}">📞 {{ listing.supervisor_phone }}</a>{% endif %}
+            {% else %}
+              <span class="text-muted">Оффисоос лавлана уу.</span>
+            {% endif %}
+          </dd>
+          <dt class="col-5">Ирц</dt>
+          <dd class="col-7"><span class="badge text-bg-{{ assignment.attendance_badge }}">{{ assignment.attendance_label }}</span></dd>
+        </dl>
+        <div class="alert alert-light border small mt-3 mb-0">
+          <strong>Ирцийн заавар:</strong>
+          {% if listing and listing.worker_instructions %}<span class="preserve-lines text-break">{{ listing.worker_instructions }}</span><br>{% endif %}
+          Ажлын байранд {{ job.start_time|hm }}-аас өмнө ирж, хянагчид нэрээ хэлнэ үү. Ирцийг хянагчийн мэдээллээр оффис бүртгэнэ.
+          Ирж чадахгүй бол <strong>заавал урьдчилан</strong> оффис руу залгана уу.
+        </div>
+      </div></section>
     {% elif application and application.status != 'withdrawn' %}
-      <div class="alert alert-light border">Таны өргөдөл: {{ badge(application) }}</div>
+      <div class="alert alert-light border">Таны хүсэлт: {{ badge(application) }}
+        {% if application.status == 'pending' %}<div class="small text-muted mt-1">Оффис хянаж байна. Баталгаажихаас өмнө ажлын байр руу бүү очоорой.</div>{% endif %}
+      </div>
     {% endif %}
 
-    {{ job_details(job, for_worker=true) }}
+    {{ job_details(job, for_worker=true, show_exact=assignment is not none) }}
 
     {% if can_apply %}
-      <form method="post" action="{{ url_for('worker.apply', job_id=job.id) }}" class="mt-4">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-primary btn-lg w-100">Өргөдөл гаргах</button>
-        <p class="small text-muted mt-2 mb-0">Өргөдөл гаргах нь томилогдсон гэсэн үг биш. Товчоо сонгоод мэдэгдэнэ.</p>
-      </form>
-    {% elif not assignment and not job.accepting_applications %}
-      <p class="text-muted mt-4">Энэ ажилд өргөдөл авахаа больсон.</p>
+      {% if profile_problem %}
+        <div class="alert alert-info mt-4">{{ profile_problem }}
+          <a href="{{ url_for('worker.edit_profile', next=url_for('worker.job_detail', job_id=job.id)) }}">Профайл засах</a></div>
+      {% else %}
+        <form method="post" action="{{ url_for('worker.apply', job_id=job.id) }}" class="mt-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-primary btn-lg w-100">Ажилд хүсэлт илгээх</button>
+          <p class="small text-muted mt-2 mb-0">Хүсэлт илгээх нь ажилд орсон гэсэн үг биш. Оффис баталгаажуулбал мэдэгдэл очно.</p>
+        </form>
+      {% endif %}
+    {% elif not assignment and not job.accepting_applications and not application %}
+      <p class="text-muted mt-4">Энэ ажилд хүсэлт авахаа больсон.</p>
+    {% endif %}
+
+    {% if application and application.changes %}
+      <details class="small mt-3">
+        <summary>Хүсэлтийн түүх</summary>
+        <ul class="list-unstyled mt-1 mb-0">
+          {% for change in application.changes %}
+            <li class="text-muted">{{ change.created_at|mn_datetime }} · {{ change.action_label }}
+              {%- if change.action == 'rejected' and change.note %} — {{ change.note }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% endif %}
+
+    {% if assignment %}
+      <h2 class="h6 mt-4">Ирц, гүйцэтгэлийн асуудал</h2>
+      {% for dispute in assignment.disputes %}
+        <div class="border rounded p-2 small mb-2">
+          <div class="d-flex justify-content-between gap-2"><span>{{ dispute.created_at|mn_datetime }} · {{ dispute.raised_role_label }}</span>
+            <span class="badge text-bg-{{ dispute.status_badge }}">{{ dispute.status_label }}</span></div>
+          {% if dispute.raised_by_id == current_user.id %}<div class="preserve-lines text-break">{{ dispute.message }}</div>{% endif %}
+          {% if dispute.status == 'resolved' %}<div class="text-success">Оффисын шийдвэр: {{ dispute.resolution }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      {% if can_report %}
+        <details class="small">
+          <summary>Ирц эсвэл ажлын талаар санал зөрөлдөөн мэдэгдэх</summary>
+          <form method="post" action="{{ url_for('worker.report_problem', assignment_id=assignment.id) }}" class="mt-2" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="form-label" for="dispute-message">{{ dispute_form.message.label.text }}</label>
+            <textarea class="form-control mb-2" id="dispute-message" name="message" rows="3" maxlength="500" required
+                      placeholder="Жишээ нь: Би 09:00-д ирсэн боловч «ирээгүй» гэж бүртгэгдсэн."></textarea>
+            <button type="submit" class="btn btn-outline-danger w-100">Гомдол илгээх</button>
+            <p class="text-muted mt-1 mb-0">Оффис хянаж шийдвэрлэнэ. Шийдвэрлэгдэх хүртэл ажлыг «дууссан» болгохгүй.</p>
+          </form>
+        </details>
+      {% else %}
+        <p class="small text-muted">Ажлын өдрөөс эхлэн энд асуудал мэдэгдэх боломжтой.</p>
+      {% endif %}
+      <div class="mt-3">{{ call_office_button() }}</div>
     {% endif %}
 
     <a class="btn btn-link px-0 mt-3" href="{{ url_for('worker.jobs') }}">Ажлын зар руу буцах</a>

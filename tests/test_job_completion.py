@@ -58,7 +58,7 @@ def test_completion_blocked_without_assignments(job, admin_user):
 
 def test_completion_blocked_when_all_assignments_cancelled(job, admin_user, two_assigned):
     for assignment in two_assigned:
-        cancel_assignment(assignment, admin_user)
+        cancel_assignment(assignment, admin_user, "Тестийн шалтгаан")
     start(reload(job), admin_user)
     with pytest.raises(ServiceError, match="Томилогдсон ажилтангүй"):
         change_job_status(reload(job), JobStatus.COMPLETED, admin_user)
@@ -81,7 +81,7 @@ def test_completion_blocked_when_nobody_came(job, admin_user, two_assigned):
 
 
 def test_cancelled_assignment_does_not_block_completion(job, admin_user, two_assigned):
-    cancel_assignment(two_assigned[1], admin_user)
+    cancel_assignment(two_assigned[1], admin_user, "Тестийн шалтгаан")
     start(reload(job), admin_user)
     record_attendance(two_assigned[0], AttendanceStatus.PRESENT, admin_user)
     change_job_status(reload(job), JobStatus.COMPLETED, admin_user)
@@ -141,7 +141,7 @@ def test_completed_job_assignment_cannot_be_cancelled(job, admin_user, two_assig
         record_attendance(assignment, AttendanceStatus.PRESENT, admin_user)
     change_job_status(reload(job), JobStatus.COMPLETED, admin_user)
     with pytest.raises(StaffingError, match="Дууссан ажлын томилолт"):
-        cancel_assignment(db.session.get(Assignment, two_assigned[0].id), admin_user)
+        cancel_assignment(db.session.get(Assignment, two_assigned[0].id), admin_user, "Тестийн шалтгаан")
 
 
 def test_cancelling_accepted_job_still_cancels_assignments(job, admin_user, two_assigned):
@@ -181,7 +181,8 @@ def test_admin_completes_through_page(client, login, job, admin_user, two_assign
     response = client.post(f"/admin/jobs/{job.id}/status", data={"new_status": "completed"}, follow_redirects=True)
     html = response.get_data(as_text=True)
     assert "Төлөв «Дууссан» болж өөрчлөгдлөө." in html
-    assert "Төлбөр хараахан бүртгэгдээгүй." in html
+    # Milestone 6: no commission configured in this test, so the job awaits finance setup.
+    assert "Санхүү: Санхүүгийн тооцоо хүлээж буй" in html
     assert "Төлөгдсөн" not in html
 
 

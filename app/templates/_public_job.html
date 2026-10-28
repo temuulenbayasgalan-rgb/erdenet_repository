@@ -1,0 +1,34 @@
+{# One public job card. Uses only the fields from services.listings.public_card. #}
+{% macro job_card(card, detail_link=true) %}
+  <article class="card job-card shadow-sm" id="job-{{ card.code }}">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <h2 class="h5 mb-1 text-break">
+          {% if detail_link %}<a href="{{ url_for('main.job', code=card.code) }}">{{ card.title }}</a>
+          {% else %}{{ card.title }}{% endif %}
+        </h2>
+        <span class="badge text-bg-success fs-6 text-nowrap">{{ card.remaining }} хүн хэрэгтэй</span>
+      </div>
+      {% if card.job_type %}<span class="badge rounded-pill text-bg-light border mb-2">{{ card.job_type }}</span>{% endif %}
+      <div class="wage-line">{{ card.wage|mnt }} <span class="fs-6 fw-normal text-muted">/ өдөр (ээлж)</span></div>
+      <div class="fw-semibold">{{ card.work_date|mn_date }} · {{ card.start_time|hm }}–{{ card.end_time|hm }}</div>
+      <div class="text-muted">📍 {{ card.area }} <span class="small">(ойролцоо байршил)</span></div>
+      <p class="mt-2 mb-2 preserve-lines text-break">
+        {%- if detail_link and card.description|length > 160 %}{{ card.description[:160] }}…{% else %}{{ card.description }}{% endif -%}
+      </p>
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span class="small text-muted">Шинэчилсэн: {{ card.updated_at|mn_datetime }}</span>
+        {% if card.lat is not none %}
+          <button type="button" class="btn btn-sm btn-outline-primary" data-show-on-map="{{ card.code }}">Газрын зураг дээр</button>
+        {% endif %}
+      </div>
+      {% if detail_link %}
+        {# Logged out: straight to login, which returns to the job. Otherwise the job page,
+           where the apply button and the worker's own status are shown. #}
+        <a class="btn btn-primary w-100 mt-2" href="
+          {%- if current_user.is_authenticated %}{{ url_for('main.job', code=card.code) }}#apply
+          {%- else %}{{ url_for('auth.login', next=url_for('main.job', code=card.code)) }}{% endif %}">Ажилд хүсэлт илгээх</a>
+      {% endif %}
+    </div>
+  </article>
+{% endmacro %}

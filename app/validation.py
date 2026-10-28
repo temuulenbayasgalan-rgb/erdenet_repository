@@ -40,5 +40,14 @@ def is_valid_phone(value):
     return bool(value) and _PHONE_RE.fullmatch(value) is not None
 
 
+def office_phone_link(raw):
+    """(display, tel_href) for a configured office phone, or (None, None) if it is
+    missing or not a valid 8-digit Mongolian number. Only digits reach the link."""
+    phone = normalize_phone((raw or "").strip())
+    if not is_valid_phone(phone):
+        return None, None
+    return f"{phone[:4]} {phone[4:]}", f"tel:+976{phone}"
+
+
 def strip_text(value):
     return value.strip() if isinstance(value, str) else value

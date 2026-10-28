@@ -40,17 +40,19 @@ def test_worker_notified_of_assignment(job, make_worker, assign):
     worker = make_worker("99110001")
     assign(job, worker, agreed_wage=65000)
     [note] = notes_for(worker)
-    assert note.title == "Шинэ ажилд томилогдлоо"
+    assert note.title == "Ажил баталгаажлаа"
     assert "Тавилга зөөх" in note.message and "65 000 ₮" in note.message
-    assert note.link == "/worker/assignments"
+    assert note.link == f"/worker/jobs/{job.id}"
+    # The exact address is on the authenticated page, not in the notification text.
+    assert job.location not in note.message
     assert not note.is_read
 
 
 def test_worker_notified_of_cancelled_assignment(job, make_worker, assign, admin_user):
     worker = make_worker("99110001")
-    cancel_assignment(assign(job, worker), admin_user)
+    cancel_assignment(assign(job, worker), admin_user, "Тестийн шалтгаан")
     titles = [n.title for n in notes_for(worker)]
-    assert titles == ["Шинэ ажилд томилогдлоо", "Томилолт цуцлагдлаа"]
+    assert titles == ["Ажил баталгаажлаа", "Томилолт цуцлагдлаа"]
 
 
 def test_employer_notified_of_acceptance(make_job, employer, admin_user):
@@ -69,7 +71,7 @@ def test_employer_and_workers_notified_when_office_cancels(job, employer, make_w
     change_job_status(db.session.get(type(job), job.id), JobStatus.CANCELLED, admin_user)
     assert [n.title for n in notes_for(employer)] == ["Хүсэлт цуцлагдлаа"]
     for worker in (first, second):
-        assert [n.title for n in notes_for(worker)] == ["Шинэ ажилд томилогдлоо", "Томилолт цуцлагдлаа"]
+        assert [n.title for n in notes_for(worker)] == ["Ажил баталгаажлаа", "Томилолт цуцлагдлаа"]
 
 
 def test_employer_not_notified_of_own_cancellation(make_job, employer):
@@ -119,7 +121,7 @@ def test_retried_requests_do_not_duplicate(client, login, make_job, employer, ad
         client.post(f"/admin/jobs/{pending.id}/status", data={"new_status": "accepted"})
         client.post(f"/admin/jobs/{pending.id}/assignments", data={"worker_id": worker.id, "agreed_wage": "60000"})
     assert [n.title for n in notes_for(employer)] == ["Хүсэлт зөвшөөрөгдлөө"]
-    assert [n.title for n in notes_for(worker)] == ["Шинэ ажилд томилогдлоо"]
+    assert [n.title for n in notes_for(worker)] == ["Ажил баталгаажлаа"]
 
 
 def test_notify_same_event_twice_is_ignored(employer):
@@ -216,7 +218,7 @@ def test_notification_list_shows_own(client, login, worker_with_notes, make_work
     db.session.commit()
     login(worker_with_notes.phone)
     html = client.get("/notifications/").get_data(as_text=True)
-    assert "Шинэ ажилд томилогдлоо" in html
+    assert "Ажил баталгаажлаа" in html
     assert "Бусдын мэдэгдэл" not in html
 
 
@@ -224,7 +226,8 @@ def test_open_marks_read_and_follows_link(client, login, worker_with_notes):
     login(worker_with_notes.phone)
     [note] = notes_for(worker_with_notes)
     response = client.post(f"/notifications/{note.id}/open")
-    assert response.headers["Location"] == "/worker/assignments"
+    # Milestone 8: the confirmation opens the job page with the exact address and supervisor.
+    assert response.headers["Location"].startswith("/worker/jobs/")
     [note] = notes_for(worker_with_notes)
     assert note.is_read and note.read_at is not None
     assert 'aria-label="уншаагүй"' not in client.get("/worker/").get_data(as_text=True)

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "_forms.html" import render_field, render_checkbox %}
+{% block title %}Илгээлт · {{ job.title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10 col-lg-8">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+      <h1 class="h4 mb-0 text-break">Илгээлт: {{ job.title }}</h1>
+      <span class="badge text-bg-{{ job.listing_state_badge }}">{{ job.listing_state_label }}</span>
+    </div>
+    <p class="small text-muted">{{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }} · {{ job.public_location }}</p>
+
+    <div class="row g-2 mb-3 text-center">
+      <div class="col-4"><div class="card"><div class="card-body p-2"><div class="small text-muted">Хэрэгтэй</div><div class="fs-4 fw-bold">{{ job.workers_needed }}</div></div></div></div>
+      <div class="col-4"><div class="card"><div class="card-body p-2"><div class="small text-muted">Илгээсэн / томилсон</div><div class="fs-4 fw-bold">{{ job.positions_taken }}</div></div></div></div>
+      <div class="col-4"><div class="card"><div class="card-body p-2"><div class="small text-muted">Үлдсэн</div><div class="fs-4 fw-bold{% if job.positions_remaining %} text-success{% endif %}">{{ job.positions_remaining }}</div></div></div></div>
+    </div>
+
+    {# Private: what the office tells the worker on the phone. Never on public pages. #}
+    <div class="card border-warning mb-3"><div class="card-body">
+      <h2 class="h6">🔒 Ажилтанд утсаар хэлэх мэдээлэл <span class="badge text-bg-secondary">Зөвхөн оффис</span></h2>
+      <dl class="row small mb-0">
+        <dt class="col-5">Ажил олгогч</dt>
+        <dd class="col-7">{{ job.employer.company_name or job.employer.full_name }} ({{ job.employer.full_name }})</dd>
+        <dt class="col-5">Ажил олгогчийн утас</dt>
+        <dd class="col-7"><a href="tel:{{ job.employer.phone }}">{{ job.employer.phone }}</a></dd>
+        <dt class="col-5">Яг хаяг</dt>
+        <dd class="col-7 text-break">{{ job.location }}</dd>
+        {% if job.listing and job.listing.internal_notes %}
+          <dt class="col-5">Дотоод тэмдэглэл</dt>
+          <dd class="col-7 preserve-lines text-break">{{ job.listing.internal_notes }}</dd>
+        {% endif %}
+      </dl>
+    </div></div>
+
+    {% if job.listing_state == 'published' %}
+      <div class="card mb-3"><div class="card-body">
+        <h2 class="h6">Залгасан хүнийг илгээх</h2>
+        <form method="post" action="{{ url_for('admin.create_referral', job_id=job.id) }}" novalidate>
+          {{ referral_form.hidden_tag() }}
+          <div class="row g-2">
+            <div class="col-md-6">{{ render_field(referral_form.phone, inputmode="numeric", placeholder="99112233") }}</div>
+            <div class="col-md-6">{{ render_field(referral_form.name, maxlength=100) }}</div>
+          </div>
+          <p class="form-text mt-n2">{{ referral_form.phone.description }}</p>
+          {{ render_field(referral_form.note, rows=2, maxlength=500) }}
+          {{ render_checkbox(referral_form.contact_shared) }}
+          {% for error in referral_form.request_token.errors %}<div class="text-danger small mb-2">{{ error }}</div>{% endfor %}
+          {{ referral_form.submit(class="btn btn-primary w-100") }}
+        </form>
+      </div></div>
+    {% else %}
+      <div class="alert alert-secondary small">Зөвхөн нийтлэгдсэн, орон тоо нь дүүрээгүй зарт шинэ илгээлт бүртгэнэ.</div>
+    {% endif %}
+
+    <h2 class="h5">Илгээлтийн бүртгэл</h2>
+    {% if job.referrals %}
+      <ul class="list-group mb-3">
+        {% for r in job.referrals|reverse %}
+          <li class="list-group-item py-3">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="fw-semibold text-break">{{ r.person_label }}</div>
+              <span class="badge text-bg-{{ r.status_badge }}">{{ r.status_label }}</span>
+            </div>
+            <div class="small text-muted">Бүртгэсэн: {{ r.created_by.full_name }}, {{ r.created_at|mn_datetime }}</div>
+            <div class="small">
+              {% if r.contact_shared_at %}
+                ✅ Холбоо барих мэдээлэл өгсөн: {{ r.contact_shared_by.full_name }}, {{ r.contact_shared_at|mn_datetime }}
+              {% else %}
+                ⏳ Холбоо барих мэдээлэл хараахан өгөөгүй
+              {% endif %}
+            </div>
+            {% if r.note %}<div class="small preserve-lines text-break">📝 {{ r.note }}</div>{% endif %}
+            {% if r.status == 'cancelled' %}
+              <div class="small text-muted">Цуцалсан: {{ r.closed_by.full_name }}, {{ r.closed_at|mn_datetime }} — {{ r.close_reason }}</div>
+            {% endif %}
+            {% if r.status == 'placed' and r.assignment %}
+              <div class="small text-success">Томилолт #{{ r.assignment.id }} · {{ r.assignment.agreed_wage|mnt }} · ирц: {{ r.assignment.attendance_label }}</div>
+            {% endif %}
+
+            {% if r.status != 'cancelled' %}
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                {% if not r.contact_shared_at %}
+                  <form method="post" action="{{ url_for('admin.referral_contact_shared', job_id=job.id, referral_id=r.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-success">Холбоо барих мэдээлэл өгсөн</button>
+                  </form>
+                {% endif %}
+              </div>
+              {% if r.status == 'referred' %}
+                <details class="mt-2">
+                  <summary class="small">Ажилд орсон / цуцлах</summary>
+                  {% if r.worker_id %}
+                    <form method="post" action="{{ url_for('admin.referral_place', job_id=job.id, referral_id=r.id) }}" class="mt-2" novalidate>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      {{ render_field(place_form.agreed_wage, inputmode="numeric") }}
+                      <button type="submit" class="btn btn-sm btn-success w-100">Ажил олгогч хүлээн авсан — томилох</button>
+                    </form>
+                  {% else %}
+                    <p class="small text-muted mt-2 mb-1">Бүртгэлгүй хүн тул томилох (ирц, цалин бүртгэх) боломжгүй. Ажилтнаар бүртгүүлсний дараа дахин илгээлт бүртгэнэ.</p>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('admin.referral_cancel', job_id=job.id, referral_id=r.id) }}" class="mt-2" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {{ render_field(cancel_form.reason, rows=1, maxlength=300, placeholder="Жишээ нь: ажилтан очихгүй болсон") }}
+                    <button type="submit" class="btn btn-sm btn-outline-danger w-100">Илгээлт цуцлах (орон тоо чөлөөлнө)</button>
+                  </form>
+                </details>
+              {% endif %}
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="small text-muted">Илгээлт алга.</p>
+    {% endif %}
+
+    <a class="btn btn-link px-0" href="{{ url_for('admin.job_detail', job_id=job.id) }}">Хүсэлт рүү буцах</a>
+  </div>
+</div>
+{% endblock %}

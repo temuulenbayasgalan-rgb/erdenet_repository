@@ -26,7 +26,7 @@
               {% if application %}{{ badge(application) }}{% endif %}
             </div>
             <div class="small text-muted">{{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }}</div>
-            <div class="small text-break">{{ job.employer.employer_display_name }} · {{ job.location }}</div>
+            <div class="small text-break">{{ job.employer.employer_display_name }} · {{ job.public_location }}</div>
             <div class="small fw-semibold"><span class="text-nowrap">{{ job.wage_per_worker|mnt }}</span>
               · {{ job.positions_remaining }} хүн дутуу</div>
           </a>

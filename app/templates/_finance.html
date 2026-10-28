@@ -1,0 +1,69 @@
+{# Finance pieces for the admin pages. #}
+{% from "_forms.html" import render_field %}
+
+{% macro state_badge(label, badge) %}
+  <span class="badge text-bg-{{ badge }}">{{ label }}</span>
+{% endmacro %}
+
+{# Receipt or payout form: amount, method, when, reference, note, one-time token. #}
+{% macro money_entry_form(form, action) %}
+  <form method="post" action="{{ action }}" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="row g-2">
+      <div class="col-7">{{ render_field(form.amount, inputmode="numeric") }}</div>
+      <div class="col-5">{{ render_field(form.method, input_class="form-select") }}</div>
+      <div class="col-7">{{ render_field(form.occurred_date) }}</div>
+      <div class="col-5">{{ render_field(form.occurred_time) }}</div>
+    </div>
+    {{ render_field(form.reference, maxlength=100) }}
+    {{ render_field(form.note, rows=2, maxlength=300) }}
+    {% for error in form.request_token.errors %}<div class="text-danger small mb-2">{{ error }}</div>{% endfor %}
+    {{ form.submit(class="btn btn-primary w-100") }}
+  </form>
+{% endmacro %}
+
+{# Ledger rows. With reversal_forms, unreversed postings get a "reverse" form. #}
+{% macro ledger_list(entries, reversal_forms=none, job_id=none, show_job=false) %}
+  <ul class="list-group">
+    {% for entry in entries %}
+      <li class="list-group-item py-3{% if entry.reversed_by %} bg-body-tertiary{% endif %}">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            {{ state_badge(entry.kind_label, entry.kind_badge) }}
+            <span class="small text-muted">№{{ entry.short_id }}</span>
+          </div>
+          <span class="fw-semibold text-nowrap{% if entry.is_reversal %} text-danger{% endif %}">
+            {% if entry.is_reversal %}−{% endif %}{{ entry.amount|mnt }}
+          </span>
+        </div>
+        {% if show_job %}
+          <div class="small"><a href="{{ url_for('admin.job_finance', job_id=entry.finance.job_id) }}">{{ entry.finance.job.title }}</a></div>
+        {% endif %}
+        {% if entry.line %}<div class="small">Ажилтан: {{ entry.line.worker.full_name }}</div>{% endif %}
+        <div class="small text-muted">
+          {{ entry.method_label }} · Гүйлгээ: {{ entry.occurred_at|mn_datetime }} ·
+          Бүртгэсэн: {{ entry.created_by.full_name }}, {{ entry.created_at|mn_datetime }}
+        </div>
+        {% if entry.reference %}<div class="small">Лавлах: {{ entry.reference }}</div>{% endif %}
+        {% if entry.note %}<div class="small preserve-lines text-break">{{ entry.note }}</div>{% endif %}
+        {% if entry.is_reversal %}
+          <div class="small text-danger">№{{ entry.reverses.short_id }}-ийг буцаасан. Шалтгаан: {{ entry.reason }}</div>
+        {% elif entry.reversed_by %}
+          <div class="small text-danger">Буцаагдсан: №{{ entry.reversed_by.short_id }} ({{ entry.reversed_by.created_at|mn_datetime }})</div>
+        {% elif reversal_forms is not none and entry.id in reversal_forms %}
+          {% set rform = reversal_forms[entry.id] %}
+          <details class="mt-2"{% if rform.errors %} open{% endif %}>
+            <summary class="small text-danger">Буцаах (засвар)</summary>
+            <form method="post" action="{{ url_for('admin.reverse_ledger_entry', job_id=job_id, entry_id=entry.id) }}" class="mt-2" novalidate>
+              {{ rform.hidden_tag() }}
+              {{ render_field(rform.reason, rows=2, maxlength=300) }}
+              {{ rform.submit(class="btn btn-outline-danger w-100") }}
+            </form>
+          </details>
+        {% endif %}
+      </li>
+    {% else %}
+      <li class="list-group-item text-muted">Гүйлгээ алга.</li>
+    {% endfor %}
+  </ul>
+{% endmacro %}

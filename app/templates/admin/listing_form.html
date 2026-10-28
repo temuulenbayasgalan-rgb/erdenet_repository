@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_forms.html" import render_field, render_checkbox %}
+{% from "_map.html" import leaflet_css, leaflet_js, map_box %}
+{% block title %}{% if job %}Зар засах{% else %}Шинэ ажлын зар{% endif %}{% endblock %}
+{% block head %}{{ leaflet_css() }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10 col-lg-8">
+    <h1 class="h4 mb-1">{% if job %}Зар засах: {{ job.title }}{% else %}Шинэ ажлын зар{% endif %}</h1>
+    <p class="small text-muted">
+      <span class="badge text-bg-success">Нийтэд</span> гэсэн талбарууд нийтийн самбарт харагдана.
+      <span class="badge text-bg-secondary">Зөвхөн оффис</span> гэсэн нь хэзээ ч нийтэд харагдахгүй.
+    </p>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+
+      {% if form.employer %}
+        <fieldset class="card mb-3"><div class="card-body">
+          <legend class="h6">Ажил олгогч <span class="badge text-bg-secondary">Зөвхөн оффис</span></legend>
+          {{ render_field(form.employer, input_class="form-select") }}
+          <div class="row g-2">
+            <div class="col-md-6">{{ render_field(form.employer_name, maxlength=100) }}</div>
+            <div class="col-md-6">{{ render_field(form.employer_phone, inputmode="numeric", placeholder="99112233") }}</div>
+          </div>
+          {{ render_field(form.employer_company, maxlength=100) }}
+          <p class="form-text mb-0">Утсаар хандсан ажил олгогчийн бүртгэл шинээр үүсэх ба нэвтрэх эрхгүй (нууц үгийг хэн ч мэдэхгүй).</p>
+        </div></fieldset>
+      {% elif job %}
+        <p class="small">Ажил олгогч: <strong>{{ job.employer.company_name or job.employer.full_name }}</strong> · {{ job.employer.phone }}</p>
+      {% endif %}
+
+      <fieldset class="card mb-3"><div class="card-body">
+        <legend class="h6">Ажлын мэдээлэл <span class="badge text-bg-success">Нийтэд</span></legend>
+        {{ render_field(form.title, maxlength=100) }}
+        {{ render_field(form.skill, input_class="form-select") }}
+        {{ render_field(form.description, rows=3, maxlength=1000) }}
+        {{ render_field(form.work_date) }}
+        <div class="row g-2">
+          <div class="col-6">{{ render_field(form.start_time) }}</div>
+          <div class="col-6">{{ render_field(form.end_time) }}</div>
+        </div>
+        <div class="row g-2">
+          <div class="col-5">{{ render_field(form.workers_needed, min=1, max=50, inputmode="numeric") }}</div>
+          <div class="col-7">{{ render_field(form.wage_per_worker, inputmode="numeric") }}</div>
+        </div>
+      </div></fieldset>
+
+      <fieldset class="card mb-3"><div class="card-body">
+        <legend class="h6">Байршил</legend>
+        {{ render_field(form.public_area, maxlength=100) }}
+        <p class="form-text mt-n2">{{ form.public_area.description }} <span class="badge text-bg-success">Нийтэд</span></p>
+        <p class="small mb-1">Газрын зураг дээр дарж <strong>ойролцоо</strong> цэг тавина уу (заавал биш). Нийтэд ~100 м нарийвчлалтай харагдана.</p>
+        {{ map_box("pin-map", "Байршил сонгох газрын зураг", "map-small mb-2") }}
+        <div class="row g-2">
+          <div class="col-5">{{ render_field(form.latitude, inputmode="decimal") }}</div>
+          <div class="col-5">{{ render_field(form.longitude, inputmode="decimal") }}</div>
+          <div class="col-2 d-flex align-items-end mb-3">
+            <button type="button" id="clear-pin" class="btn btn-outline-secondary w-100" title="Цэг арилгах">✕</button>
+          </div>
+        </div>
+        {{ render_field(form.location, maxlength=200) }}
+        <p class="form-text mt-n2"><span class="badge text-bg-secondary">Нийтэд биш</span> Зөвхөн баталгаажсан ажилтан аппаас харна.</p>
+      </div></fieldset>
+
+      <fieldset class="card mb-3"><div class="card-body">
+        <legend class="h6">Баталгаажсан ажилтанд <span class="badge text-bg-info">Зөвхөн томилогдсон ажилтан</span></legend>
+        <p class="form-text mt-0">Оффис хүсэлтийг баталгаажуулсны дараа тухайн ажилтан яг хаяг, хянагчийн утас, зааврыг аппаас харна. Нийтэд болон хүсэлт илгээгчдэд харагдахгүй.</p>
+        <div class="row g-2">
+          <div class="col-md-6">{{ render_field(form.supervisor_name, maxlength=100) }}</div>
+          <div class="col-md-6">{{ render_field(form.supervisor_phone, inputmode="numeric", placeholder="99112233") }}</div>
+        </div>
+        {{ render_field(form.worker_instructions, rows=2, maxlength=500) }}
+        <p class="form-text mt-n2">{{ form.worker_instructions.description }}</p>
+      </div></fieldset>
+
+      <fieldset class="card mb-3"><div class="card-body">
+        <legend class="h6">Тэмдэглэл</legend>
+        {{ render_field(form.notes, rows=2, maxlength=500) }}
+        <p class="form-text mt-n2">Баталгаажсан ажилтанд аппд харагдана, нийтийн самбарт харагдахгүй.</p>
+        {{ render_field(form.internal_notes, rows=2, maxlength=500) }}
+      </div></fieldset>
+
+      {% if form.publish_now %}{{ render_checkbox(form.publish_now) }}{% endif %}
+      <div class="d-grid gap-2">
+        {{ form.submit(class="btn btn-primary btn-lg") }}
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.job_detail', job_id=job.id) if job else url_for('admin.listing_overview') }}">Буцах</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+  {{ leaflet_js() }}
+  <script src="{{ url_for('static', filename='js/pin_picker.js') }}"></script>
+{% endblock %}

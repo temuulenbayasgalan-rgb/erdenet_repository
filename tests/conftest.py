@@ -125,6 +125,92 @@ def assign(admin_user):
 
 
 @pytest.fixture
+def apply(app):
+    """A worker applies through the real service (job must be a published listing)."""
+    from app.services import applications
+
+    def _apply(job, worker):
+        return applications.apply(job.id, worker.id)
+    return _apply
+
+
+@pytest.fixture
+def accept(admin_user):
+    """The office accepts an application through the real service; returns the assignment."""
+    from app.services import applications
+
+    def _accept(application, admin=None):
+        return applications.accept(application.id, (admin or admin_user).id)
+    return _accept
+
+
+@pytest.fixture
+def make_listed_job(make_job, admin_user):
+    """An accepted job with a public listing (published by default)."""
+    from app.models import JobListing, ListingChange, utcnow
+
+    counter = {"n": 0}
+
+    def _make(employer, published=True, area="5-р баг, Шинэ төв орчим", lat=None, lng=None,
+              skill_code=None, internal_notes="", **job_overrides):
+        job_overrides.setdefault("status", JobStatus.ACCEPTED)
+        job = make_job(employer, **job_overrides)
+        counter["n"] += 1
+        skill = db.session.scalar(db.select(Skill).filter_by(code=skill_code)) if skill_code else None
+        now = utcnow()
+        listing = JobListing(job=job, public_code=f"code{counter['n']:04d}", public_area=area,
+                             latitude=lat, longitude=lng, skill=skill, internal_notes=internal_notes,
+                             is_published=published, published_at=now if published else None,
+                             updated_at=now, updated_by=admin_user)
+        listing.changes.append(ListingChange(action="created", changed_by=admin_user))
+        db.session.add(listing)
+        db.session.commit()
+        return job
+    return _make
+
+
+@pytest.fixture
+def finance_employer(make_user):
+    return make_user(phone="99330001", role=Role.EMPLOYER, full_name="Ганбат Дорж")
+
+
+@pytest.fixture
+def make_completed_job(make_job, make_worker, assign, admin_user, finance_employer):
+    """Build a completed job through the real services.
+
+    `workers` is a list of (attendance, agreed_wage); "cancelled" means the assignment is
+    cancelled before completion. `commission=None` leaves the commission unconfigured.
+    Returns the job; its snapshot (if any) is job.finance."""
+    from app.services import finance as finance_service
+    from app.services.attendance import record_attendance
+    from app.services.jobs import change_job_status
+    from app.services.staffing import cancel_assignment
+
+    counter = {"n": 0}
+
+    def _make(workers=(("present", 60000),), commission=10000, title="Ачаа буулгах"):
+        if commission is not None:
+            finance_service.set_commission(commission, admin_user)
+        job = make_job(finance_employer, status=JobStatus.ACCEPTED, work_date=office_today(),
+                       workers_needed=max(len(workers), 1), title=title)
+        assignments = []
+        for attendance, wage in workers:
+            counter["n"] += 1
+            worker = make_worker(f"9911{counter['n']:04d}", full_name=f"Ажилтан Дугаар{counter['n']}")
+            assignments.append((assign(job, worker, agreed_wage=wage), attendance))
+        change_job_status(db.session.get(Job, job.id), JobStatus.IN_PROGRESS, admin_user)
+        for assignment, attendance in assignments:
+            if attendance == "cancelled":
+                cancel_assignment(assignment, admin_user, "Ажилтан ирэхгүй болсон")
+            else:
+                record_attendance(assignment, attendance, admin_user)
+        change_job_status(db.session.get(Job, job.id), JobStatus.COMPLETED, admin_user)
+        db.session.expire_all()
+        return db.session.get(Job, job.id)
+    return _make
+
+
+@pytest.fixture
 def skills(app):
     """The seeded skills, keyed by code: skills["cleaning"].id"""
     return {skill.code: skill for skill in db.session.scalars(db.select(Skill))}

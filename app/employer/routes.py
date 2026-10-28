@@ -3,6 +3,7 @@ from datetime import timedelta
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
+from app.admin.forms import DisputeForm
 from app.employer import bp
 from app.employer.forms import (
     MAX_DAYS_AHEAD,
@@ -11,9 +12,11 @@ from app.employer.forms import (
     WorkerDirectoryFilterForm,
 )
 from app.extensions import db
-from app.models import Job, JobStatus, JobStatusChange, Role, User
+from app.models import Assignment, Job, JobStatus, JobStatusChange, Role, User
 from app.security import role_required
 from app.services import ServiceError
+from app.services import disputes as dispute_service
+from app.services.finance import summarize
 from app.services.jobs import cancel_job_by_employer
 from app.services.staffing import eligible_workers_query, is_publicly_listed
 from app.validation import office_today
@@ -78,7 +81,33 @@ def new_job():
 @bp.route("/jobs/<int:job_id>")
 @role_required(Role.EMPLOYER)
 def job_detail(job_id):
-    return render_template("employer/job_detail.html", job=_own_job_or_404(job_id))
+    job = _own_job_or_404(job_id)
+    # The employer sees only their own totals: what they owe, paid and still owe.
+    finance_summary = summarize(job.finance) if job.finance else None
+    can_report = job.status in dispute_service.OPEN_JOB_STATUSES and job.work_date <= office_today()
+    return render_template("employer/job_detail.html", job=job, finance_summary=finance_summary,
+                           can_report=can_report)
+
+
+@bp.route("/assignments/<int:assignment_id>/dispute", methods=["POST"])
+@role_required(Role.EMPLOYER)
+def report_problem(assignment_id):
+    """The employer (or their supervisor) disagrees about a worker's attendance or work."""
+    assignment = db.session.get(Assignment, assignment_id)
+    # Only assignments on this employer's own jobs; others look like they don't exist.
+    if assignment is None or assignment.job.employer_id != current_user.id:
+        abort(404)
+    form = DisputeForm()
+    if not form.validate_on_submit():
+        flash("Гомдол илгээгдсэнгүй: " + " ".join(form.message.errors or ["маягт буруу байна."]), "danger")
+    else:
+        try:
+            dispute_service.raise_dispute(assignment.id, current_user.id, form.message.data)
+        except ServiceError as error:
+            flash(str(error), "danger")
+        else:
+            flash("Гомдол илгээгдлээ. Товчоо хянаад шийдвэрлэнэ.", "success")
+    return redirect(url_for("employer.job_detail", job_id=assignment.job_id))
 
 
 @bp.route("/jobs/<int:job_id>/cancel", methods=["POST"])

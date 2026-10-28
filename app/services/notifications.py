@@ -12,7 +12,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.formatting import hm, mn_date, mnt
-from app.models import Notification
+from app.models import Notification, Role, User
 
 
 def url_for(endpoint, **values):
@@ -56,14 +56,82 @@ def _when(job):
 # workers; employer messages never include any worker's details.
 
 def worker_assigned(assignment):
+    """The placement is confirmed (an accepted application or a direct assignment)."""
     job = assignment.job
     notify(
         assignment.worker,
         f"assignment:{assignment.id}:created",
-        "Шинэ ажилд томилогдлоо",
-        f"«{job.title}» · {_when(job)} · {job.location}. Цалин: {mnt(assignment.agreed_wage)}.",
-        url_for("worker.assignments"),
+        "Ажил баталгаажлаа",
+        f"«{job.title}» · {_when(job)}. Цалин: {mnt(assignment.agreed_wage)}. "
+        "Яг хаяг, хянагчийн утас, ирцийн зааврыг аппаас харна уу.",
+        url_for("worker.job_detail", job_id=job.id),
     )
+
+
+def application_rejected(application, reason=""):
+    job = application.job
+    message = f"«{job.title}» ({_when(job)}) ажилд илгээсэн таны хүсэлтийг товчоо хүлээж авсангүй."
+    if reason:
+        message += f" Шалтгаан: {reason}"
+    notify(
+        application.worker,
+        f"application:{application.id}:rejected",
+        "Хүсэлт татгалзагдлаа",
+        message,
+        url_for("worker.applications"),
+    )
+
+
+def job_details_changed(job, change_id, field_labels, recipients):
+    """Important details of a job changed. Names only *which* details changed; the
+    worker reads the new values on their own page (so no exact address goes to
+    people who are only applicants)."""
+    for worker in recipients:
+        notify(
+            worker,
+            f"job:{job.id}:edited:{change_id}",
+            "Ажлын мэдээлэл өөрчлөгдлөө",
+            f"«{job.title}» ({_when(job)}): {', '.join(field_labels)} өөрчлөгдсөн. Дэлгэрэнгүйг шалгана уу.",
+            url_for("worker.job_detail", job_id=job.id),
+        )
+
+
+def dispute_opened(dispute):
+    """Tell every active office admin (except the one who recorded it)."""
+    job = dispute.assignment.job
+    admins = db.session.scalars(db.select(User).filter_by(role=Role.ADMIN, is_active=True)).all()
+    for admin in admins:
+        if admin.id == dispute.raised_by_id:
+            continue
+        notify(
+            admin,
+            f"dispute:{dispute.id}:opened",
+            "Шинэ гомдол (ирц/гүйцэтгэл)",
+            f"«{job.title}» ({_when(job)}): {dispute.raised_role_label} гомдол гаргалаа.",
+            url_for("admin.job_attendance", job_id=job.id),
+        )
+
+
+def dispute_resolved(dispute):
+    assignment = dispute.assignment
+    job = assignment.job
+    people = [dispute.raised_by] + ([assignment.worker] if assignment.worker is not dispute.raised_by else [])
+    for person in people:
+        if person.id == dispute.resolved_by_id:
+            continue
+        if person.role == Role.WORKER:
+            link = url_for("worker.job_detail", job_id=job.id)
+        elif person.role == Role.EMPLOYER:
+            link = url_for("employer.job_detail", job_id=job.id)
+        else:
+            link = url_for("admin.job_attendance", job_id=job.id)
+        notify(
+            person,
+            f"dispute:{dispute.id}:resolved",
+            "Гомдол шийдвэрлэгдлээ",
+            f"«{job.title}» ({_when(job)}): {dispute.resolution}",
+            link,
+        )
 
 
 def worker_assignment_cancelled(assignment):
@@ -98,10 +166,13 @@ def employer_job_cancelled(job):
 
 
 def employer_job_completed(job):
+    message = f"«{job.title}» ({_when(job)}) ажил дууссан гэж товчоо бүртгэлээ."
+    if job.finance is not None:
+        message += f" Товчоонд төлөх дүн: {mnt(job.finance.total_due)}."
     notify(
         job.employer,
         f"job:{job.id}:completed",
         "Ажил дууслаа",
-        f"«{job.title}» ({_when(job)}) ажил дууссан гэж товчоо бүртгэлээ.",
+        message,
         url_for("employer.job_detail", job_id=job.id),
     )

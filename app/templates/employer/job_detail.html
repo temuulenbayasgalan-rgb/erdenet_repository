@@ -21,12 +21,45 @@
             <div class="fw-semibold">{{ assignment.worker.public_name }}</div>
             <div class="small text-muted">
               {{ assignment.worker.worker_profile.skills|map(attribute="name")|join(", ") }}
+              · Ирц: <span class="badge text-bg-{{ assignment.attendance_badge }}">{{ assignment.attendance_label }}</span>
             </div>
+            {% for dispute in assignment.disputes if dispute.raised_by_id == current_user.id %}
+              <div class="small mt-1"><span class="badge text-bg-{{ dispute.status_badge }}">Гомдол: {{ dispute.status_label }}</span>
+                {% if dispute.status == 'resolved' %} {{ dispute.resolution }}{% endif %}</div>
+            {% endfor %}
+            {% if can_report %}
+              <details class="small mt-1">
+                <summary>Ирц/ажлын талаар санал зөрөлдөөн мэдэгдэх</summary>
+                <form method="post" action="{{ url_for('employer.report_problem', assignment_id=assignment.id) }}" class="mt-2" novalidate>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <textarea class="form-control mb-2" name="message" rows="2" maxlength="500" required aria-label="Тайлбар"></textarea>
+                  <button type="submit" class="btn btn-sm btn-outline-danger w-100">Товчоонд мэдэгдэх</button>
+                </form>
+              </details>
+            {% endif %}
           </li>
         {% endfor %}
       </ul>
     {% else %}
       <p class="small text-muted">Товчоо ажилтан томилоогүй байна.</p>
+    {% endif %}
+
+    {% if finance_summary %}
+      <div class="card mt-4"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <h2 class="h6 mb-0">Товчоонд төлөх</h2>
+          <span class="badge text-bg-{{ finance_summary.employer_state_badge }}">{{ finance_summary.employer_state_label }}</span>
+        </div>
+        <dl class="row small mb-0">
+          <dt class="col-7">Нийт төлөх дүн</dt>
+          <dd class="col-5 text-end text-nowrap fw-semibold">{{ finance_summary.finance.total_due|mnt }}</dd>
+          <dt class="col-7">Төлсөн</dt>
+          <dd class="col-5 text-end text-nowrap">{{ finance_summary.collected|mnt }}</dd>
+          <dt class="col-7">Үлдэгдэл</dt>
+          <dd class="col-5 text-end text-nowrap mb-0">{{ finance_summary.outstanding|mnt }}</dd>
+        </dl>
+        <p class="small text-muted mt-2 mb-0">Төлбөрийг товчоонд шууд төлнө. Төлсний дараа товчоо бүртгэнэ.</p>
+      </div></div>
     {% endif %}
 
     {{ status_history(job) }}

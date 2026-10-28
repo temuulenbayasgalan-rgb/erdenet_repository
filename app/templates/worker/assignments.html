@@ -24,6 +24,13 @@
               {% endif %}
               {% if job.status == 'completed' %} · <span class="text-success">Ажил дууссан</span>{% endif %}
             </div>
+            {% set my_pay = pay.get(assignment.id) %}
+            {% if my_pay %}
+              <div class="small mt-1">
+                Цалин олголт: <span class="badge text-bg-{{ my_pay.state_badge }}">{{ my_pay.state_label }}</span>
+                · олгосон {{ my_pay.paid|mnt }} · үлдэгдэл {{ my_pay.remaining|mnt }}
+              </div>
+            {% endif %}
           </li>
         {% endfor %}
       </ul>

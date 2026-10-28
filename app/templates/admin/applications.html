@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% from "_jobs.html" import badge %}
+{% block title %}Ажилтны хүсэлтүүд{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10 col-lg-8">
+    <h1 class="h4 mb-1">Ажилтны хүсэлтүүд</h1>
+    <p class="small text-muted">
+      «Баталгаажуулах» нь тухайн ажилтныг шууд томилно: орон тоо, ажилтны боломж, цагийн давхцлыг тэр мөчид дахин шалгана.
+      Хүлээгдэж буй хүсэлт орон тоо эзлэхгүй.
+    </p>
+    {% if open_disputes %}
+      <div class="alert alert-danger small">Шийдвэрлээгүй ирц/гүйцэтгэлийн гомдол: {{ open_disputes }}. Тухайн ажлын «Ирц» хуудаснаас шийдвэрлэнэ.</div>
+    {% endif %}
+
+    <form method="get" class="row g-2 align-items-end mb-3" novalidate>
+      <div class="col-12 col-sm-6">
+        {{ form.job.label(class="form-label small mb-1") }}
+        {{ form.job(class="form-select") }}
+      </div>
+      <div class="col-8 col-sm-4">
+        {{ form.status.label(class="form-label small mb-1") }}
+        {{ form.status(class="form-select") }}
+      </div>
+      <div class="col-4 col-sm-2"><button type="submit" class="btn btn-primary w-100">Шүүх</button></div>
+    </form>
+
+    {% for job, items in groups.items() %}
+      {% set pending = job.pending_applications|length %}
+      <section class="card mb-4 shadow-sm">
+        <div class="card-header">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <a class="fw-semibold text-break" href="{{ url_for('admin.job_detail', job_id=job.id) }}">{{ job.title }}</a>
+            <span class="badge text-bg-{{ job.listing_state_badge }}">{{ job.listing_state_label }}</span>
+          </div>
+          <div class="small text-muted">{{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }} ·
+            <span class="text-nowrap">{{ job.wage_per_worker|mnt }}</span></div>
+          <div class="small">
+            Орон тоо: <strong>{{ job.positions_taken }} / {{ job.workers_needed }}</strong>,
+            үлдсэн <strong>{{ job.positions_remaining }}</strong> ·
+            хянагдаж буй хүсэлт <strong>{{ pending }}</strong>
+            {% if job.open_referrals %}· утсаар илгээсэн {{ job.open_referrals|length }}{% endif %}
+          </div>
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for application in items %}
+            {% set worker = application.worker %}
+            {% set profile = worker.worker_profile %}
+            <li class="list-group-item py-3" id="application-{{ application.id }}">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <a class="fw-semibold" href="{{ url_for('admin.worker_detail', user_id=worker.id) }}">{{ worker.full_name }}</a>
+                  <div class="small"><a href="tel:{{ worker.phone }}">{{ worker.phone }}</a>
+                    {% if not worker.is_active %}· <span class="text-danger">Идэвхгүй</span>{% endif %}</div>
+                </div>
+                {{ badge(application) }}
+              </div>
+              {% if profile %}
+                <div class="small mt-1">
+                  <span class="badge text-bg-{{ profile.availability_badge }}">{{ profile.availability_label }}</span>
+                  {{ profile.skills|map(attribute="name")|join(", ") or "Ур чадвар сонгоогүй" }}
+                </div>
+                {% if profile.description %}<div class="small text-muted preserve-lines text-break">{{ profile.description }}</div>{% endif %}
+              {% endif %}
+              {% if application.id in busy %}
+                <div class="small text-danger mt-1">⚠ Энэ цагт өөр ажилд томилогдсон — баталгаажуулах боломжгүй.</div>
+              {% endif %}
+              <div class="small text-muted mt-1">Илгээсэн: {{ application.created_at|mn_datetime }}</div>
+
+              {% if application.status == 'pending' %}
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                  <form method="post" action="{{ url_for('admin.accept_application', application_id=application.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="back" value="{{ back }}">
+                    <button type="submit" class="btn btn-success" {% if not job.positions_remaining %}disabled{% endif %}>
+                      ✓ Баталгаажуулах ({{ job.wage_per_worker|mnt }})
+                    </button>
+                  </form>
+                  <details class="flex-fill">
+                    <summary class="btn btn-outline-secondary">Татгалзах</summary>
+                    <form method="post" action="{{ url_for('admin.reject_application', application_id=application.id) }}" class="mt-2" novalidate>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="back" value="{{ back }}">
+                      <label class="form-label small" for="reason-{{ application.id }}">{{ reject_form.reason.label.text }}</label>
+                      <textarea class="form-control mb-2" id="reason-{{ application.id }}" name="reason" rows="2" maxlength="300"></textarea>
+                      <button type="submit" class="btn btn-outline-danger w-100">Татгалзах</button>
+                    </form>
+                  </details>
+                </div>
+                {% if not job.positions_remaining %}
+                  <div class="small text-muted mt-1">Орон тоо дүүрсэн. Татгалзах эсвэл орон тоо чөлөөлөгдөхийг хүлээнэ үү.</div>
+                {% endif %}
+              {% elif application.assignment and application.assignment.status == 'active' %}
+                <div class="small text-success mt-1">Томилогдсон · цалин {{ application.assignment.agreed_wage|mnt }}</div>
+              {% endif %}
+
+              {% if application.changes %}
+                <details class="small mt-2">
+                  <summary>Түүх ({{ application.changes|length }})</summary>
+                  <ul class="list-unstyled mt-1 mb-0">
+                    {% for change in application.changes %}
+                      <li class="text-muted">{{ change.created_at|mn_datetime }} · {{ change.action_label }} · {{ change.changed_by.full_name }}{% if change.note %} — {{ change.note }}{% endif %}</li>
+                    {% endfor %}
+                  </ul>
+                </details>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% else %}
+      <p class="text-muted">Шүүлтүүрт тохирох хүсэлт алга.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

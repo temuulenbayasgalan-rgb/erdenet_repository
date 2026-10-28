@@ -26,7 +26,9 @@
 {% endmacro %}
 
 {# Full read-only details of a job request. Workers see it without totals or office data. #}
-{% macro job_details(job, for_worker=false) %}
+{# for_worker: hide office/money data. show_exact=false (workers not placed on the job):
+   only the approximate public area, no notes. The exact address shows once confirmed. #}
+{% macro job_details(job, for_worker=false, show_exact=true) %}
   <div class="card shadow-sm">
     <div class="card-body">
       <dl class="row mb-0">
@@ -41,7 +43,12 @@
         <dd class="col-7 col-sm-8">{{ job.start_time|hm }} – {{ job.end_time|hm }}</dd>
 
         <dt class="col-5 col-sm-4">Байршил</dt>
-        <dd class="col-7 col-sm-8 text-break">{{ job.location }}</dd>
+        {% if show_exact %}
+          <dd class="col-7 col-sm-8 text-break">{{ job.location }}</dd>
+        {% else %}
+          <dd class="col-7 col-sm-8 text-break">{{ job.public_location }}
+            <span class="small text-muted d-block">Яг хаяг оффис баталгаажуулсны дараа энд харагдана.</span></dd>
+        {% endif %}
 
         <dt class="col-5 col-sm-4">Ажилтны тоо</dt>
         <dd class="col-7 col-sm-8">{{ job.workers_needed }}</dd>
@@ -57,7 +64,7 @@
         <dt class="col-12 mt-2">Хийх ажил</dt>
         <dd class="col-12 preserve-lines text-break">{{ job.description }}</dd>
 
-        {% if job.notes %}
+        {% if job.notes and show_exact %}
           <dt class="col-12">Нэмэлт тэмдэглэл</dt>
           <dd class="col-12 preserve-lines text-break">{{ job.notes }}</dd>
         {% endif %}

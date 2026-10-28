@@ -16,6 +16,72 @@
 
     {{ job_details(job) }}
 
+    {# --- public listing (Milestone 7) --- #}
+    <div class="card mt-3 border-primary"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+        <h2 class="h6 mb-0">Нийтийн зар</h2>
+        <span class="badge text-bg-{{ job.listing_state_badge }}">{{ job.listing_state_label }}</span>
+      </div>
+      {% if job.listing %}
+        <p class="small mb-2">
+          📍 {{ job.listing.public_area }}{% if job.listing.has_pin %} · газрын зургийн цэгтэй{% endif %}
+          {% if job.listing.skill %} · {{ job.listing.skill.name }}{% endif %}<br>
+          Илгээсэн/томилсон {{ job.positions_taken }} / {{ job.workers_needed }} · үлдсэн {{ job.positions_remaining }}
+          · хянагдаж буй хүсэлт {{ job.pending_applications|length }}<br>
+          Хянагч: {{ job.listing.supervisor_name or "—" }}{% if job.listing.supervisor_phone %} · {{ job.listing.supervisor_phone }}{% endif %}
+          <span class="text-muted">(зөвхөн баталгаажсан ажилтанд харагдана)</span><br>
+          <span class="text-muted">Шинэчилсэн: {{ job.listing.updated_by.full_name }}, {{ job.listing.updated_at|mn_datetime }}</span>
+        </p>
+      {% else %}
+        <p class="small text-muted mb-2">Зарын мэдээлэл (нийтэд харагдах байршил) бөглөөгүй байна.</p>
+      {% endif %}
+      <div class="d-grid gap-2">
+        {% if job.status in ('pending', 'accepted') %}
+          <a class="btn btn-outline-primary" href="{{ url_for('admin.edit_listing', job_id=job.id) }}">
+            {% if job.listing %}Зар засах{% else %}Зарын мэдээлэл бөглөх{% endif %}
+          </a>
+        {% endif %}
+        {% if job.listing and job.status == 'accepted' and not job.listing.is_published and job.listing_state != 'expired' %}
+          <form method="post" action="{{ url_for('admin.publish_listing', job_id=job.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-success w-100">Нийтлэх</button>
+          </form>
+        {% endif %}
+        {% if job.listing and job.listing.is_published and job.status == 'accepted' %}
+          <a class="btn btn-primary" href="{{ url_for('admin.job_referrals', job_id=job.id) }}">
+            Илгээлт ({{ job.referrals|length }}) · ажил олгогчийн холбоо барих
+          </a>
+          <form method="post" action="{{ url_for('admin.pause_listing', job_id=job.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-warning w-100">Түр зогсоох (нийтээс нуух)</button>
+          </form>
+        {% elif job.referrals %}
+          <a class="btn btn-outline-primary" href="{{ url_for('admin.job_referrals', job_id=job.id) }}">Илгээлт ({{ job.referrals|length }})</a>
+        {% endif %}
+        {% if job.status in ('pending', 'accepted') %}
+          <details>
+            <summary class="small text-danger">Ажил, зарыг цуцлах</summary>
+            <form method="post" action="{{ url_for('admin.cancel_listing', job_id=job.id) }}" class="mt-2" novalidate>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label class="form-label small" for="cancel-reason">Цуцлах шалтгаан</label>
+              <input class="form-control mb-2" id="cancel-reason" name="reason" maxlength="300" required>
+              <button type="submit" class="btn btn-outline-danger w-100">Цуцлах</button>
+            </form>
+          </details>
+        {% endif %}
+      </div>
+      {% if job.listing and job.listing.changes %}
+        <details class="small mt-2">
+          <summary>Зарын түүх ({{ job.listing.changes|length }})</summary>
+          <ul class="list-unstyled mt-1 mb-0">
+            {% for change in job.listing.changes|reverse %}
+              <li class="text-muted">{{ change.created_at|mn_datetime }} · {{ change.action_label }} · {{ change.changed_by.full_name }}{% if change.note %} — {{ change.note }}{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
+    </div></div>
+
     {# --- assignments --- #}
     <h2 class="h5 mt-4">Томилогдсон ажилтнууд
       <span class="text-muted fs-6">({{ job.active_assignments|length }} / {{ job.workers_needed }},
@@ -24,20 +90,26 @@
     {% if job.active_assignments %}
       <ul class="list-group mb-3">
         {% for assignment in job.active_assignments %}
-          <li class="list-group-item d-flex justify-content-between align-items-center gap-2 py-2">
+          <li class="list-group-item py-2">
             <div>
               <a class="fw-semibold" href="{{ url_for('admin.worker_detail', user_id=assignment.worker_id) }}">{{ assignment.worker.full_name }}</a>
               <div class="small text-muted">
                 <a href="tel:{{ assignment.worker.phone }}">{{ assignment.worker.phone }}</a> ·
                 <span class="text-nowrap">{{ assignment.agreed_wage|mnt }}</span> ·
                 <span class="badge text-bg-{{ assignment.attendance_badge }}">{{ assignment.attendance_label }}</span>
+                {% if assignment.open_disputes %}· <span class="badge text-bg-danger">Гомдолтой</span>{% endif %}
               </div>
             </div>
             {% if job.status != 'completed' %}
-              <form method="post" action="{{ url_for('admin.cancel_assignment_view', assignment_id=assignment.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger">Цуцлах</button>
-              </form>
+              <details class="mt-1">
+                <summary class="small text-danger">Томилолт цуцлах</summary>
+                <form method="post" action="{{ url_for('admin.cancel_assignment_view', assignment_id=assignment.id) }}" class="mt-2" novalidate>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label class="form-label small" for="cancel-{{ assignment.id }}">{{ cancel_form.reason.label.text }}</label>
+                  <textarea class="form-control mb-2" id="cancel-{{ assignment.id }}" name="reason" rows="2" maxlength="300" required></textarea>
+                  <button type="submit" class="btn btn-sm btn-outline-danger w-100">Цуцлах (ажилтанд мэдэгдэнэ)</button>
+                </form>
+              </details>
             {% endif %}
           </li>
         {% endfor %}
@@ -58,7 +130,7 @@
                 <select class="form-select{% if assignment_form.worker_id.errors %} is-invalid{% endif %}" id="worker_id" name="worker_id">
                   {% for worker in candidates %}
                     <option value="{{ worker.id }}">
-                      {{ worker.full_name }} · {{ worker.phone }}{% if worker.id in approved_ids %} · өргөдөл тэнцсэн{% endif %}
+                      {{ worker.full_name }} · {{ worker.phone }}{% if worker.id in pending_ids %} · хүсэлт илгээсэн{% endif %}
                     </option>
                   {% endfor %}
                 </select>
@@ -84,7 +156,7 @@
         <ul class="list-unstyled mt-2">
           {% for assignment in cancelled_assignments %}
             <li class="text-muted">{{ assignment.worker.full_name }} · {{ assignment.cancelled_at|mn_datetime }}
-              · {{ assignment.cancelled_by.full_name }}</li>
+              · {{ assignment.cancelled_by.full_name }}{% if assignment.cancel_reason %} — {{ assignment.cancel_reason }}{% endif %}</li>
           {% endfor %}
         </ul>
       </details>
@@ -94,16 +166,18 @@
       {% if job.active_assignments and job.status in ('accepted', 'in_progress', 'completed') %}
         <a class="btn btn-primary" href="{{ url_for('admin.job_attendance', job_id=job.id) }}">Ирц бүртгэх / харах</a>
       {% endif %}
-      <a class="btn btn-outline-primary" href="{{ url_for('admin.job_applications', job_id=job.id) }}">
-        Өргөдлүүд: {{ application_counts['pending'] }} хянагдаж буй, {{ application_counts['approved'] }} тэнцсэн
+      <a class="btn {% if application_counts['pending'] %}btn-warning{% else %}btn-outline-primary{% endif %}" href="{{ url_for('admin.job_applications', job_id=job.id) }}">
+        Ажилтны хүсэлт: {{ application_counts['pending'] }} хянагдаж буй, {{ application_counts['approved'] }} баталгаажсан
       </a>
     </div>
 
     {% if job.completed_change %}
-      <p class="small text-muted mt-3 mb-0">
+      <p class="small text-muted mt-3 mb-2">
         Дууссан: {{ job.completed_change.created_at|mn_datetime }} · {{ job.completed_change.changed_by.full_name }}.
-        Төлбөр хараахан бүртгэгдээгүй.
       </p>
+      <a class="btn btn-outline-success w-100" href="{{ url_for('admin.job_finance', job_id=job.id) }}">
+        Санхүү: {{ finance_state_label }}
+      </a>
     {% endif %}
 
     {% if job.next_statuses %}

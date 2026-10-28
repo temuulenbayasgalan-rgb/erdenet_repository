@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_finance.html" import ledger_list, state_badge %}
+{% block title %}Санхүү{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h1 class="h4 mb-0">Санхүү</h1>
+  <div class="d-flex gap-2">
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.ledger') }}">Гүйлгээний түүх</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.commission') }}">
+      Шимтгэл: {% if rate %}{{ rate.amount_per_worker|mnt }}{% else %}тохируулаагүй{% endif %}
+    </a>
+  </div>
+</div>
+
+{% if not rate %}
+  <div class="alert alert-warning">Шимтгэлийн хэмжээ тохируулаагүй байна. Тохируулах хүртэл дууссан ажилд тооцоо үүсэхгүй.</div>
+{% endif %}
+
+<div class="row row-cols-2 row-cols-md-3 g-2 mb-4">
+  {% for label, value in [
+      ("Ажил олгогчийн үлдэгдэл", totals.employer_outstanding),
+      ("Цалин олгоход бэлэн", totals.available_for_payouts),
+      ("Олгосон цалин", totals.wages_paid),
+      ("Олгоогүй цалин (бүгд)", totals.wages_outstanding),
+      ("Тооцоолсон шимтгэл", totals.commission_charged),
+      ("Бүрэн төлөгдсөн ажлын шимтгэл", totals.commission_collected_jobs),
+  ] %}
+    <div class="col"><div class="card h-100"><div class="card-body p-2">
+      <div class="small text-muted">{{ label }}</div>
+      <div class="fw-semibold text-nowrap">{{ value|mnt }}</div>
+    </div></div></div>
+  {% endfor %}
+</div>
+
+{% macro job_rows(items, empty) %}
+  {% if items %}
+    <div class="list-group mb-3">
+      {% for s in items %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.job_finance', job_id=s.finance.job_id) }}">
+          <div class="d-flex justify-content-between gap-2">
+            <span class="text-break">{{ s.finance.job.title }} · {{ s.finance.job.work_date|mn_date }}</span>
+            {{ state_badge(s.employer_state_label, s.employer_state_badge) }}
+          </div>
+          <div class="small text-muted">
+            Нийт {{ s.finance.total_due|mnt }} · төлсөн {{ s.collected|mnt }} · үлдэгдэл {{ s.outstanding|mnt }}
+            {% if s.fully_collected %} · олгох цалин {{ s.wages_outstanding|mnt }}{% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="small text-muted">{{ empty }}</p>
+  {% endif %}
+{% endmacro %}
+
+<h2 class="h6">Санхүүгийн тооцоо хүлээж буй / хянах</h2>
+{% if without_snapshot %}
+  <div class="list-group mb-3">
+    {% for job, state in without_snapshot %}
+      <a class="list-group-item list-group-item-action" href="{{ url_for('admin.job_finance', job_id=job.id) }}">
+        <div class="d-flex justify-content-between gap-2">
+          <span class="text-break">{{ job.title }} · {{ job.work_date|mn_date }}</span>
+          {{ state_badge(FinanceState.LABELS[state], FinanceState.BADGES[state]) }}
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="small text-muted">Алга.</p>
+{% endif %}
+
+<h2 class="h6">Ажил олгогч төлөөгүй</h2>
+{{ job_rows(groups.not_paid, "Алга.") }}
+<h2 class="h6">Хэсэгчлэн төлсөн</h2>
+{{ job_rows(groups.partial, "Алга.") }}
+<h2 class="h6">Ажилтны цалин олгоход бэлэн</h2>
+{{ job_rows(groups.ready, "Алга.") }}
+<p class="small text-muted">Тооцоо дууссан ажил: {{ groups.settled_count }}</p>
+
+<h2 class="h6 mt-4">Сүүлийн гүйлгээ</h2>
+{{ ledger_list(recent, show_job=true) }}
+{% endblock %}

@@ -151,7 +151,7 @@ def test_employer_sees_assigned_workers_on_own_job(client, employer, workers, ma
 def test_cancelled_assignment_not_shown_to_employer(client, employer, workers, make_job, assign, admin_user):
     from app.services.staffing import cancel_assignment
     job = make_job(employer, status=JobStatus.ACCEPTED)
-    cancel_assignment(assign(job, workers["cleaner"]), admin_user)
+    cancel_assignment(assign(job, workers["cleaner"]), admin_user, "Тестийн шалтгаан")
     assert "Б.Дорж" not in client.get(f"/employer/jobs/{job.id}").get_data(as_text=True)
 
 

@@ -5,7 +5,6 @@ import pytest
 
 from app.extensions import db
 from app.models import ApplicationStatus, Assignment, AssignmentStatus, Availability, JobApplication, JobStatus, Role
-from app.services.staffing import apply_to_job
 
 
 @pytest.fixture
@@ -20,9 +19,9 @@ def employer(make_user):
 
 
 @pytest.fixture
-def job(make_job, employer):
-    return make_job(employer, status=JobStatus.ACCEPTED, workers_needed=2, wage_per_worker=60000,
-                    start_time=time(9), end_time=time(13))
+def job(make_listed_job, employer):
+    return make_listed_job(employer, workers_needed=2, wage_per_worker=60000,
+                           start_time=time(9), end_time=time(13))
 
 
 def assignments_for(job):
@@ -35,58 +34,56 @@ def post_assign(client, job, worker_id, wage="60000", **extra):
                        data={"worker_id": str(worker_id), "agreed_wage": wage, **extra})
 
 
-# --- application review ----------------------------------------------------------------------
+# --- application review (the office inbox; full coverage in test_applications.py) ---------------
 
-def test_applications_page_shows_worker_details(client, admin, job, make_worker):
+def test_applications_page_shows_worker_details(client, admin, job, make_worker, apply):
     worker = make_worker("99110001", full_name="Бат Дорж", skills=("cleaning", "loading"),
                          description="Туршлагатай")
-    apply_to_job(job, worker)
-    html = client.get(f"/admin/jobs/{job.id}/applications").get_data(as_text=True)
+    apply(job, worker)
+    html = client.get(f"/admin/jobs/{job.id}/applications", follow_redirects=True).get_data(as_text=True)
     for text in ("Бат Дорж", "99110001", "Цэвэрлэгээ", "Ачаа ачих, буулгах", "Ажил хийх боломжтой",
-                 "Туршлагатай", "Хянагдаж байна", "Тэнцүүлэх", "Татгалзах", "Томилох"):
+                 "Туршлагатай", "Хянагдаж байна", "Баталгаажуулах", "Татгалзах"):
         assert text in html
 
 
-def test_filter_applications_by_status(client, admin, job, make_worker):
+def test_filter_applications_by_status(client, admin, job, make_worker, apply):
+    from app.services.applications import withdraw
     pending = make_worker("99110001", full_name="Хүлээж Буй")
     withdrawn = make_worker("99110002", full_name="Татсан Хүн")
-    apply_to_job(job, pending)
-    from app.services.staffing import withdraw_application
-    withdraw_application(apply_to_job(job, withdrawn))
+    apply(job, pending)
+    withdraw(apply(job, withdrawn).id, withdrawn.id)
 
-    html = client.get(f"/admin/jobs/{job.id}/applications?status=withdrawn").get_data(as_text=True)
+    html = client.get(f"/admin/applications?job={job.id}&status=withdrawn").get_data(as_text=True)
     assert "Татсан Хүн" in html and "Хүлээж Буй" not in html
-    html = client.get(f"/admin/jobs/{job.id}/applications?status=bogus").get_data(as_text=True)
+    html = client.get(f"/admin/applications?job={job.id}&status=bogus").get_data(as_text=True)
     assert "Шүүлтүүрийн утга буруу" in html and "Хүлээж Буй" in html
 
 
-@pytest.mark.parametrize("decision, label", [
-    (ApplicationStatus.APPROVED, "Тэнцсэн"), (ApplicationStatus.REJECTED, "Тэнцээгүй"),
-])
-def test_admin_reviews_application(client, admin, job, make_worker, decision, label):
-    application = apply_to_job(job, make_worker("99110001"))
-    response = client.post(f"/admin/applications/{application.id}/review",
-                           data={"decision": decision}, follow_redirects=True)
-    assert f"Өргөдөл «{label}» боллоо." in response.get_data(as_text=True)
+def test_admin_accepts_application_creating_assignment(client, admin, job, make_worker, apply):
+    application = apply(job, make_worker("99110001", full_name="Бат Дорж"))
+    response = client.post(f"/admin/applications/{application.id}/accept", follow_redirects=True)
+    assert "Бат Дорж баталгаажлаа" in response.get_data(as_text=True)
     db.session.expire_all()
-    assert application.status == decision
+    assert application.status == ApplicationStatus.APPROVED
     assert application.reviewed_by_id == admin.id
-    # Approval alone does not assign.
+    # Accepting *is* the placement.
+    assert [(a.worker_id, a.agreed_wage, a.status) for a in assignments_for(job)] == \
+        [(application.worker_id, job.wage_per_worker, AssignmentStatus.ACTIVE)]
+
+
+def test_admin_rejects_application(client, admin, job, make_worker, apply):
+    application = apply(job, make_worker("99110001"))
+    response = client.post(f"/admin/applications/{application.id}/reject",
+                           data={"reason": "Туршлага шаардлагатай"}, follow_redirects=True)
+    assert "Хүсэлтийг татгалзлаа." in response.get_data(as_text=True)
+    db.session.expire_all()
+    assert application.status == ApplicationStatus.REJECTED
     assert assignments_for(job) == []
 
 
-@pytest.mark.parametrize("decision", ["withdrawn", "pending", "", "assigned"])
-def test_invalid_review_decision(client, admin, job, make_worker, decision):
-    application = apply_to_job(job, make_worker("99110001"))
-    response = client.post(f"/admin/applications/{application.id}/review",
-                           data={"decision": decision}, follow_redirects=True)
-    assert "Шийдвэр буруу байна." in response.get_data(as_text=True)
-    db.session.expire_all()
-    assert application.status == ApplicationStatus.PENDING
-
-
 def test_review_missing_application_is_404(client, admin):
-    assert client.post("/admin/applications/99999/review", data={"decision": "approved"}).status_code == 404
+    assert client.post("/admin/applications/99999/accept").status_code == 404
+    assert client.post("/admin/applications/99999/reject").status_code == 404
 
 
 # --- assignment through the admin pages ------------------------------------------------------------
@@ -113,13 +110,15 @@ def test_admin_assigns_worker(client, admin, job, make_worker):
     assert "(1 / 2," in html
 
 
-def test_assign_from_applications_page_returns_there(client, admin, job, make_worker):
+def test_direct_assignment_accepts_pending_application(client, admin, job, make_worker, apply):
     worker = make_worker("99110001")
-    apply_to_job(job, worker)
+    apply(job, worker)
     response = post_assign(client, job, worker.id, back_to="applications")
     assert response.headers["Location"] == f"/admin/jobs/{job.id}/applications"
     db.session.expire_all()
-    assert db.session.scalar(db.select(JobApplication.status)) == ApplicationStatus.APPROVED
+    application = db.session.scalar(db.select(JobApplication))
+    assert application.status == ApplicationStatus.APPROVED
+    assert application.assignment is not None and application.changes[-1].action == "accepted"
 
 
 def test_open_redirect_via_back_to_is_ignored(client, admin, job, make_worker):
@@ -187,16 +186,29 @@ def test_pending_job_cannot_be_staffed(client, admin, make_job, employer, make_w
 
 def test_admin_cancels_assignment(client, admin, job, make_worker, assign):
     assignment = assign(job, make_worker("99110001", full_name="Бат Дорж"))
-    response = client.post(f"/admin/assignments/{assignment.id}/cancel", follow_redirects=True)
+    response = client.post(f"/admin/assignments/{assignment.id}/cancel",
+                           data={"reason": "Ажил олгогч цөөлсөн"}, follow_redirects=True)
     html = response.get_data(as_text=True)
     assert "Томилолт цуцлагдлаа." in html
-    assert "Цуцлагдсан томилолт (1)" in html
+    assert "Цуцлагдсан томилолт (1)" in html and "Ажил олгогч цөөлсөн" in html
     db.session.expire_all()
     assert assignment.status == AssignmentStatus.CANCELLED
     assert assignment.cancelled_by_id == admin.id
+    assert assignment.cancel_reason == "Ажил олгогч цөөлсөн"
     # Cancelling again is refused, not silently repeated.
-    again = client.post(f"/admin/assignments/{assignment.id}/cancel", follow_redirects=True)
+    again = client.post(f"/admin/assignments/{assignment.id}/cancel",
+                        data={"reason": "Дахин"}, follow_redirects=True)
     assert "аль хэдийн цуцлагдсан" in again.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("reason", ["", "  ", "ab", "x" * 301])
+def test_cancelling_assignment_requires_a_reason(client, admin, job, make_worker, assign, reason):
+    assignment = assign(job, make_worker("99110001"))
+    response = client.post(f"/admin/assignments/{assignment.id}/cancel", data={"reason": reason},
+                           follow_redirects=True)
+    assert "Томилолт цуцлагдсангүй" in response.get_data(as_text=True)
+    db.session.expire_all()
+    assert assignment.status == AssignmentStatus.ACTIVE
 
 
 def test_cancel_missing_assignment_is_404(client, admin):

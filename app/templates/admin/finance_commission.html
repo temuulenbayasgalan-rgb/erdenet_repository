@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_forms.html" import render_field %}
+{% block title %}Шимтгэл{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h4 mb-2">Шимтгэлийн хэмжээ</h1>
+    <p class="small text-muted">
+      Товчоо дууссан ажил бүрт ирсэн ажилтан тутмаас тогтмол шимтгэл авна.
+      Шинэ хэмжээ зөвхөн цаашид үүсэх тооцоонд хэрэглэгдэнэ — өмнөх тооцоо өөрчлөгдөхгүй.
+    </p>
+    <form method="post" novalidate class="mb-4">
+      {{ form.hidden_tag() }}
+      {{ render_field(form.amount, inputmode="numeric", placeholder="10000") }}
+      {{ render_field(form.note, rows=2, maxlength=300) }}
+      {{ form.submit(class="btn btn-primary w-100") }}
+    </form>
+
+    <h2 class="h6">Өөрчлөлтийн түүх</h2>
+    {% if history %}
+      <ul class="list-group">
+        {% for rate in history %}
+          <li class="list-group-item">
+            <div class="d-flex justify-content-between">
+              <span class="fw-semibold">#{{ rate.id }} · {{ rate.amount_per_worker|mnt }}</span>
+              {% if loop.first %}<span class="badge text-bg-success">Одоогийн</span>{% endif %}
+            </div>
+            <div class="small text-muted">{{ rate.created_by.full_name }} · {{ rate.created_at|mn_datetime }}</div>
+            {% if rate.note %}<div class="small preserve-lines text-break">{{ rate.note }}</div>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted small">Шимтгэл хараахан тохируулаагүй.</p>
+    {% endif %}
+    <a class="btn btn-link px-0 mt-3" href="{{ url_for('admin.finance_dashboard') }}">Санхүүгийн самбар руу буцах</a>
+  </div>
+</div>
+{% endblock %}

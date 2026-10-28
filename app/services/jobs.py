@@ -4,9 +4,8 @@ The allowed moves and the completion rule live on the Job model (change_status,
 completion_problem). This module adds who may make each move, and notifications.
 """
 from app.extensions import db
-from app.models import JobStatus, Role, TransitionError
-from app.services import ServiceError
-from app.services import notifications
+from app.models import CommissionRate, JobStatus, Role, TransitionError
+from app.services import ServiceError, applications, finance, notifications
 
 ADMIN_ONLY_STATUSES = (JobStatus.ACCEPTED, JobStatus.IN_PROGRESS, JobStatus.COMPLETED)
 
@@ -41,12 +40,21 @@ def _apply(job, new_status, actor, note):
     if new_status == JobStatus.ACCEPTED:
         notifications.employer_job_accepted(job)
     elif new_status == JobStatus.COMPLETED:
+        # Freeze the money in the same transaction, if the office has set a commission.
+        # Without one the job is completed anyway and shows "awaiting financial setup".
+        if CommissionRate.current() is not None:
+            try:
+                finance.build_snapshot(job, actor)
+            except ServiceError:
+                db.session.rollback()  # the completion is undone too
+                raise
         notifications.employer_job_completed(job)
     elif new_status == JobStatus.CANCELLED:
         if actor.id != job.employer_id:  # the employer doesn't need telling about their own action
             notifications.employer_job_cancelled(job)
         for assignment in to_be_cancelled:
             notifications.worker_assignment_cancelled(assignment)
+        applications.close_for_cancelled_job(job, actor, to_be_cancelled)
 
     try:
         db.session.commit()

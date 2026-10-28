@@ -1,0 +1,21 @@
+{# Leaflet 1.9.4 from unpkg, pinned with Subresource Integrity hashes (checked against
+   the published files): the browser refuses a modified copy. Load only on map pages. #}
+{% macro leaflet_css() %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+{% endmacro %}
+
+{% macro leaflet_js() %}
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+{% endmacro %}
+
+{# A map container; settings come from config (MAP_CENTER, MAP_ZOOM, MAP_TILE_URL). #}
+{% macro map_box(id, label, class_="") %}
+  <div id="{{ id }}" class="map-box {{ class_ }}" role="region" aria-label="{{ label }}"
+       data-center-lat="{{ config.MAP_CENTER[0] }}" data-center-lng="{{ config.MAP_CENTER[1] }}"
+       data-zoom="{{ config.MAP_ZOOM }}" data-tile-url="{{ config.MAP_TILE_URL }}"
+       data-attribution="{{ config.MAP_ATTRIBUTION }}">
+    <div class="map-loading small text-muted p-3">Газрын зураг ачаалж байна…</div>
+  </div>
+{% endmacro %}

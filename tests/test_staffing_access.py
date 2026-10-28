@@ -3,16 +3,15 @@ import pytest
 
 from app.extensions import db
 from app.models import ApplicationStatus, Assignment, AssignmentStatus, JobApplication, JobStatus, Role
-from app.services.staffing import apply_to_job
 
 
 @pytest.fixture
-def world(make_user, make_worker, make_job, assign):
+def world(make_user, make_worker, make_listed_job, assign, apply):
     employer = make_user(phone="99330001", role=Role.EMPLOYER, full_name="Компани")
     worker = make_worker("99110001")
     other_worker = make_worker("99110002")
-    job = make_job(employer, status=JobStatus.ACCEPTED, workers_needed=3)
-    application = apply_to_job(job, other_worker)
+    job = make_listed_job(employer, workers_needed=3)
+    application = apply(job, other_worker)
     assignment = assign(job, worker)
     return dict(employer=employer, worker=worker, job=job, application=application, assignment=assignment,
                 other_worker=other_worker)
@@ -34,7 +33,9 @@ def routes(w):
         ],
         "admin": [
             ("get", f"/admin/jobs/{w['job'].id}/applications"),
-            ("post", f"/admin/applications/{w['application'].id}/review"),
+            ("get", "/admin/applications"),
+            ("post", f"/admin/applications/{w['application'].id}/accept"),
+            ("post", f"/admin/applications/{w['application'].id}/reject"),
             ("post", f"/admin/jobs/{w['job'].id}/assignments"),
             ("post", f"/admin/assignments/{w['assignment'].id}/cancel"),
         ],
@@ -51,7 +52,7 @@ def unchanged(w):
 @pytest.mark.parametrize("area", ["worker", "employer", "admin"])
 def test_anonymous_is_sent_to_login(client, world, area):
     for method, url in routes(world)[area]:
-        response = getattr(client, method)(url, data={"decision": "approved"})
+        response = getattr(client, method)(url, data={"reason": "Шалтгаан тест"})
         assert response.status_code == 302, url
         assert response.headers["Location"].startswith("/auth/login"), url
     unchanged(world)
@@ -67,7 +68,8 @@ def test_roles_cannot_use_other_areas(client, world, make_user, login, role, for
     login("99440001")
     for area in forbidden_areas:
         for method, url in routes(world)[area]:
-            data = {"decision": "approved", "worker_id": str(world["other_worker"].id), "agreed_wage": "60000"}
+            data = {"reason": "Шалтгаан тест", "worker_id": str(world["other_worker"].id),
+                    "agreed_wage": "60000"}
             response = getattr(client, method)(url, data=data)
             assert response.status_code == 403, url
     unchanged(world)

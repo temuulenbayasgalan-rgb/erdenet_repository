@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% from "_finance.html" import ledger_list, money_entry_form, state_badge %}
+{% from "_jobs.html" import status_badge %}
+{% block title %}Санхүү · {{ job.title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10 col-lg-8">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+      <h1 class="h4 mb-0 text-break">Санхүү: {{ job.title }}</h1>
+      {{ status_badge(job) }}
+    </div>
+    <p class="text-muted small">
+      {{ job.work_date|mn_date }} · {{ job.employer.full_name }}{% if job.employer.company_name %} ({{ job.employer.company_name }}){% endif %}
+      · <a href="{{ url_for('admin.job_detail', job_id=job.id) }}">Хүсэлт рүү</a>
+    </p>
+
+    {% if job.status != 'completed' %}
+      <div class="alert alert-secondary">Санхүүгийн тооцоо зөвхөн дууссан ажилд үүснэ. Одоогийн төлөв: {{ job.status_label }}.</div>
+
+    {% elif not finance %}
+      {# --- completed, no snapshot yet --- #}
+      <div class="alert alert-{{ 'danger' if state == FinanceState.NEEDS_REVIEW else 'warning' }}">
+        <div class="fw-semibold">{{ FinanceState.LABELS[state] }}</div>
+        {% if state == FinanceState.NEEDS_REVIEW %}
+          Энэ ажилд ирсэн ажилтан алга тул ажил олгогч төлөх дүнгүй, ажилтанд олгох цалингүй.
+          Тэг дүнтэй тооцоо үүсгэхгүй. Шаардлагатай бол гараар хянана уу.
+        {% elif not rate %}
+          Шимтгэлийн хэмжээ тохируулаагүй тул тооцоо үүсээгүй.
+          <a href="{{ url_for('admin.commission') }}">Шимтгэл тохируулах</a>.
+        {% else %}
+          Энэ ажил санхүүгийн тооцоогүй байна (жишээ нь шимтгэл тохируулахаас өмнө дууссан).
+        {% endif %}
+      </div>
+      {% if preview %}
+        <div class="card mb-3"><div class="card-body">
+          <h2 class="h6">Урьдчилсан тооцоо</h2>
+          <p class="small mb-2">
+            {{ preview.count }} ирсэн ажилтан · цалин {{ preview.wages|mnt }} ·
+            шимтгэл {{ preview.per_worker|mnt }} × {{ preview.count }} = {{ preview.commission|mnt }} ·
+            <span class="fw-semibold">нийт {{ preview.due|mnt }}</span>
+          </p>
+          <form method="post" action="{{ url_for('admin.create_job_snapshot', job_id=job.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary w-100">Санхүүгийн тооцоо үүсгэх</button>
+          </form>
+          <p class="small text-muted mt-2 mb-0">Үүссэний дараа тооцоо өөрчлөгдөхгүй.</p>
+        </div></div>
+      {% endif %}
+
+    {% else %}
+      {# --- snapshot exists --- #}
+      <div class="card mb-3"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <h2 class="h6 mb-0">Тооцоо</h2>
+          {{ state_badge(summary.state_label, summary.state_badge) }}
+        </div>
+        <dl class="row mb-0 small">
+          <dt class="col-7">Ажилтны цалин ({{ finance.lines|length }} хүн)</dt>
+          <dd class="col-5 text-end text-nowrap">{{ finance.total_wages|mnt }}</dd>
+          <dt class="col-7">Шимтгэл ({{ finance.commission_per_worker|mnt }} × {{ finance.lines|length }})</dt>
+          <dd class="col-5 text-end text-nowrap">{{ finance.total_commission|mnt }}</dd>
+          <dt class="col-7 fs-6">Ажил олгогч төлөх</dt>
+          <dd class="col-5 text-end text-nowrap fs-6 fw-semibold">{{ finance.total_due|mnt }}</dd>
+          <dt class="col-7">Төлсөн</dt>
+          <dd class="col-5 text-end text-nowrap">{{ summary.collected|mnt }}</dd>
+          <dt class="col-7">Үлдэгдэл</dt>
+          <dd class="col-5 text-end text-nowrap fw-semibold{% if summary.outstanding %} text-danger{% endif %}">{{ summary.outstanding|mnt }}</dd>
+          <dt class="col-7">Ажил олгогчийн төлбөр</dt>
+          <dd class="col-5 text-end">{{ state_badge(summary.employer_state_label, summary.employer_state_badge) }}</dd>
+        </dl>
+        <p class="small text-muted mt-2 mb-0">
+          Тооцоо үүсгэсэн: {{ finance.created_by.full_name }}, {{ finance.created_at|mn_datetime }} ·
+          шимтгэлийн тохиргоо #{{ finance.commission_rate_id }} · тооцооны хувилбар {{ finance.calculation_version }}
+        </p>
+      </div></div>
+
+      {% if summary.outstanding > 0 %}
+        <div class="card mb-3"><div class="card-body">
+          <h2 class="h6">Ажил олгогчоос орлого бүртгэх</h2>
+          {{ money_entry_form(receipt_form, url_for('admin.create_receipt', job_id=job.id)) }}
+        </div></div>
+      {% endif %}
+
+      <h2 class="h5 mt-4">Ажилтны цалин
+        <span class="text-muted fs-6">(олгосон {{ summary.wages_paid|mnt }}, үлдэгдэл {{ summary.wages_outstanding|mnt }})</span>
+      </h2>
+      {% if not summary.fully_collected %}
+        <p class="small text-warning-emphasis">Ажил олгогчийн төлбөр бүрэн орсны дараа ажилтанд цалин олгоно.</p>
+      {% endif %}
+      <ul class="list-group mb-3">
+        {% for ls in summary.lines %}
+          <li class="list-group-item py-3">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <div class="fw-semibold">{{ ls.line.worker.full_name }}</div>
+                <div class="small text-muted">
+                  Цалин {{ ls.line.wage|mnt }} · олгосон {{ ls.paid|mnt }} ·
+                  <span class="fw-semibold">үлдэгдэл {{ ls.remaining|mnt }}</span>
+                </div>
+              </div>
+              {{ state_badge(ls.state_label, ls.state_badge) }}
+            </div>
+            {% if summary.fully_collected and ls.remaining > 0 %}
+              {% set pform = payout_forms[ls.line.id] %}
+              <details class="mt-2"{% if pform.errors %} open{% endif %}>
+                <summary class="small">Цалин олгосныг бүртгэх</summary>
+                <div class="mt-2">
+                  {{ money_entry_form(pform, url_for('admin.create_payout', job_id=job.id, line_id=ls.line.id)) }}
+                </div>
+              </details>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+
+      <h2 class="h5 mt-4">Гүйлгээний түүх</h2>
+      {{ ledger_list(finance.entries|reverse|list, reversal_forms=reversal_forms, job_id=job.id) }}
+    {% endif %}
+
+    <a class="btn btn-link px-0 mt-3" href="{{ url_for('admin.finance_dashboard') }}">Санхүүгийн самбар руу буцах</a>
+  </div>
+</div>
+{% endblock %}

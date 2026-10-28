@@ -92,7 +92,7 @@ def test_non_admin_cannot_record(assignment, make_user, role):
 
 
 def test_cancelled_assignment_is_locked(assignment, admin_user):
-    cancel_assignment(assignment, admin_user)
+    cancel_assignment(assignment, admin_user, "Тестийн шалтгаан")
     with pytest.raises(ServiceError, match="Цуцлагдсан томилолт"):
         record_attendance(reload(assignment), AttendanceStatus.PRESENT, admin_user)
     assert db.session.scalar(db.select(db.func.count(AttendanceChange.id))) == 0
@@ -146,7 +146,7 @@ def admin(admin_user, login):
 
 def test_attendance_page_lists_assigned_workers(client, admin, todays_job, assignment, make_worker, assign):
     cancelled = assign(todays_job, make_worker("99110003", full_name="Цуцлагдсан Хүн"))
-    cancel_assignment(cancelled, admin)
+    cancel_assignment(cancelled, admin, "Тестийн шалтгаан")
     html = client.get(f"/admin/jobs/{todays_job.id}/attendance").get_data(as_text=True)
     assert "Бат Дорж" in html
     assert "Цуцлагдсан Хүн" not in html

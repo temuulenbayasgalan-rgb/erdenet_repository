@@ -9,13 +9,18 @@ from app.models import (
     AssignmentStatus,
     Job,
     JobApplication,
+    JobFinanceLine,
     JobStatus,
     Role,
     Skill,
     WorkerProfile,
 )
-from app.security import role_required
-from app.services.staffing import StaffingError, apply_to_job, withdraw_application
+from app.admin.forms import DisputeForm
+from app.security import is_safe_redirect, role_required
+from app.services import ServiceError
+from app.services import applications as application_service
+from app.services import disputes as dispute_service
+from app.services.finance import summarize
 from app.validation import office_today
 from app.worker import bp
 from app.worker.forms import WorkerProfileForm
@@ -70,7 +75,9 @@ def edit_profile():
         profile.description = form.description.data or ""
         db.session.commit()
         flash("Профайл амжилттай хадгалагдлаа.", "success")
-        return redirect(url_for("worker.index"))
+        # Back to the job the worker was applying for, if they came from one.
+        next_url = request.args.get("next")
+        return redirect(next_url if is_safe_redirect(next_url) else url_for("worker.index"))
 
     if form.is_submitted():
         flash("Профайл хадгалагдсангүй. Улаанаар тэмдэглэсэн талбаруудыг засна уу.", "danger")
@@ -120,9 +127,15 @@ def job_detail(job_id):
     can_apply = job.accepting_applications and assignment is None and (
         application is None or application.status == ApplicationStatus.WITHDRAWN
     )
+    # The confirmed-placement details (exact address, supervisor, instructions) are
+    # shown only when this worker has an active assignment on the job.
+    can_report = assignment is not None and job.status in dispute_service.OPEN_JOB_STATUSES \
+        and job.work_date <= office_today()
     return render_template(
         "worker/job_detail.html", job=job, application=application,
-        assignment=assignment, can_apply=can_apply,
+        assignment=assignment, can_apply=can_apply, can_report=can_report,
+        profile_problem=application_service.worker_profile_problem(current_user),
+        dispute_form=DisputeForm(formdata=None),
     )
 
 
@@ -131,12 +144,33 @@ def job_detail(job_id):
 def apply(job_id):
     job, _application, _assignment = _visible_job_or_404(job_id)
     try:
-        apply_to_job(job, current_user)
-    except StaffingError as error:
+        application_service.apply(job.id, current_user.id)
+    except ServiceError as error:
         flash(str(error), "danger")
     else:
-        flash("Өргөдөл илгээгдлээ. Товчоо шийдвэрлээд мэдэгдэнэ.", "success")
+        flash("Хүсэлт илгээгдлээ. Оффис хянаад баталгаажуулбал мэдэгдэл очно.", "success")
     return redirect(url_for("worker.job_detail", job_id=job_id))
+
+
+@bp.route("/assignments/<int:assignment_id>/dispute", methods=["POST"])
+@role_required(Role.WORKER)
+def report_problem(assignment_id):
+    # Only the worker's own assignment; anyone else's looks like it doesn't exist.
+    assignment = db.session.scalar(
+        db.select(Assignment).filter_by(id=assignment_id, worker_id=current_user.id))
+    if assignment is None:
+        abort(404)
+    form = DisputeForm()
+    if not form.validate_on_submit():
+        flash("Гомдол илгээгдсэнгүй: " + " ".join(form.message.errors or ["маягт буруу байна."]), "danger")
+    else:
+        try:
+            dispute_service.raise_dispute(assignment.id, current_user.id, form.message.data)
+        except ServiceError as error:
+            flash(str(error), "danger")
+        else:
+            flash("Гомдол илгээгдлээ. Оффис хянаад шийдвэрлэнэ.", "success")
+    return redirect(url_for("worker.job_detail", job_id=assignment.job_id))
 
 
 @bp.route("/applications")
@@ -145,7 +179,7 @@ def applications():
     my_applications = db.session.scalars(
         db.select(JobApplication)
         .filter_by(worker_id=current_user.id)
-        .options(selectinload(JobApplication.job))
+        .options(selectinload(JobApplication.job), selectinload(JobApplication.changes))
         .order_by(JobApplication.updated_at.desc(), JobApplication.id.desc())
     ).all()
     return render_template("worker/applications.html", applications=my_applications)
@@ -160,11 +194,11 @@ def withdraw(application_id):
     if application is None:
         abort(404)
     try:
-        withdraw_application(application)
-    except StaffingError as error:
+        application_service.withdraw(application.id, current_user.id)
+    except ServiceError as error:
         flash(str(error), "danger")
     else:
-        flash("Өргөдлөө татан авлаа.", "info")
+        flash("Хүсэлтээ татан авлаа.", "info")
     return redirect(url_for("worker.applications"))
 
 
@@ -180,4 +214,8 @@ def assignments():
     ).all()
     active = [a for a in mine if a.status == AssignmentStatus.ACTIVE]
     cancelled = [a for a in mine if a.status != AssignmentStatus.ACTIVE]
-    return render_template("worker/assignments.html", active=active, cancelled=cancelled)
+    # Only this worker's own line: their wage, paid so far and remaining.
+    pay = {}
+    for line in db.session.scalars(db.select(JobFinanceLine).filter_by(worker_id=current_user.id)):
+        pay[line.assignment_id] = summarize(line.finance).line_summary(line.id)
+    return render_template("worker/assignments.html", active=active, cancelled=cancelled, pay=pay)

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_office.html" import call_office_button, call_first_notice with context %}
+{% from "_public_job.html" import job_card with context %}
+{% from "_jobs.html" import badge %}
+{% block title %}{{ card.title }} — Эрдэнэт Ажил{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    {{ job_card(card, detail_link=false) }}
+
+    {# --- applying. Every rule is re-checked on the server; this only shows the state. --- #}
+    <section id="apply" class="card mt-3 border-primary apply-panel"><div class="card-body">
+      {% if not current_user.is_authenticated %}
+        <a class="btn btn-primary btn-lg w-100" href="{{ login_url }}">Ажилд хүсэлт илгээх</a>
+        <p class="small text-muted mt-2 mb-2">Хүсэлт илгээхийн тулд ажилтны бүртгэлээрээ нэвтэрнэ үү. Нэвтэрсний дараа энэ хуудас руу буцна.</p>
+        <a class="btn btn-outline-primary w-100" href="{{ register_url }}">Бүртгэлгүй юу? Ажилтнаар бүртгүүлэх</a>
+      {% elif current_user.role != 'worker' %}
+        <p class="mb-0 small text-muted">Ажилд зөвхөн ажилтны бүртгэлээр хүсэлт илгээнэ. Та {{ current_user.role_label|lower }} эрхээр нэвтэрсэн байна.</p>
+      {% elif assignment %}
+        <div class="alert alert-success mb-2">✓ Та энэ ажилд баталгаажсан.</div>
+        <a class="btn btn-success w-100" href="{{ url_for('worker.job_detail', job_id=assignment.job_id) }}">Яг хаяг, хянагч, зааврыг харах</a>
+      {% elif application and application.status == 'pending' %}
+        <div class="mb-2">Таны хүсэлт: {{ badge(application) }}</div>
+        <p class="small text-muted">Оффис хянаад баталгаажуулбал мэдэгдэл очно. Баталгаажихаас өмнө ажлын байр руу бүү очоорой.</p>
+        <a class="btn btn-outline-primary w-100" href="{{ url_for('worker.applications') }}">Миний хүсэлтүүд</a>
+      {% elif application and application.status != 'withdrawn' %}
+        <div class="mb-0">Таны хүсэлт: {{ badge(application) }}</div>
+      {% elif profile_problem %}
+        <div class="alert alert-info mb-2">{{ profile_problem }}</div>
+        <a class="btn btn-primary w-100" href="{{ url_for('worker.edit_profile', next=url_for('main.job', code=card.code) ~ '#apply') }}">Профайл бөглөх</a>
+      {% else %}
+        <form method="post" action="{{ url_for('main.apply', code=card.code) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-primary btn-lg w-100">Ажилд хүсэлт илгээх</button>
+        </form>
+        <p class="small text-muted mt-2 mb-0">Хүсэлт илгээх нь ажилд орсон гэсэн үг биш. Оффис баталгаажуулбал аппд мэдэгдэл очиж, яг хаяг харагдана.</p>
+      {% endif %}
+    </div></section>
+
+    <div class="alert alert-light border mt-3">{{ call_first_notice() }}</div>
+    <div class="mt-2">{{ call_office_button(class_="w-100") }}</div>
+    {% if card.lat is not none %}
+      <a class="btn btn-outline-primary w-100 mt-2" href="{{ url_for('main.index') }}#map-{{ card.code }}">🗺 Газрын зураг дээр харах</a>
+    {% endif %}
+    <a class="btn btn-link px-0 mt-2" href="{{ url_for('main.index') }}">← Бүх ажлын зар</a>
+  </div>
+</div>
+{% endblock %}

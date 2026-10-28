@@ -58,6 +58,27 @@ class MnIntegerField(_ParseErrorMixin, IntegerField):
     parse_error_message = "Бүхэл тоо оруулна уу."
 
 
+class _CoordinateParser(StringField):
+    def process_formdata(self, valuelist):
+        self.data = None
+        if not valuelist or not valuelist[0].strip():
+            return
+        text = valuelist[0].strip().replace(",", ".")
+        if not re.fullmatch(r"-?[0-9]{1,3}(\.[0-9]{1,8})?", text):
+            raise ValueError("invalid coordinate")
+        self.data = float(text)
+
+
+class CoordinateField(_ParseErrorMixin, _CoordinateParser):
+    """Optional latitude or longitude in decimal degrees, e.g. 49.0275."""
+    parse_error_message = "Координатыг 49.0275 гэх мэт аравтын бутархайгаар оруулна уу."
+
+    def _value(self):
+        if self.data is not None:
+            return f"{self.data:.6f}".rstrip("0").rstrip(".")
+        return self.raw_data[0] if self.raw_data else ""
+
+
 class _MoneyParser(StringField):
     def process_formdata(self, valuelist):
         self.data = None

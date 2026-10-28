@@ -12,10 +12,16 @@ from app.security import is_safe_redirect
 INVALID_LOGIN = "Утасны дугаар эсвэл нууц үг буруу байна."
 
 
+def _next_url():
+    """Where to go after login/registration: ?next=, if it is a path on this site."""
+    target = request.args.get("next")
+    return target if is_safe_redirect(target) else None
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for(current_user.dashboard_endpoint))
+        return redirect(_next_url() or url_for(current_user.dashboard_endpoint))
 
     form = LoginForm()
     if form.validate_on_submit():
@@ -26,12 +32,9 @@ def login():
             flash(INVALID_LOGIN, "danger")
         else:
             login_user(user, remember=form.remember.data)
-            next_url = request.args.get("next")
-            if is_safe_redirect(next_url):
-                return redirect(next_url)
-            return redirect(url_for(user.dashboard_endpoint))
+            return redirect(_next_url() or url_for(user.dashboard_endpoint))
 
-    return render_template("auth/login.html", form=form)
+    return render_template("auth/login.html", form=form, next_url=_next_url())
 
 
 @bp.route("/logout", methods=["POST"])
@@ -56,7 +59,7 @@ def _register(role, title, form_class):
     """Shared registration logic. The role comes from the URL, never from the form,
     so nobody can register themselves as an admin."""
     if current_user.is_authenticated:
-        return redirect(url_for(current_user.dashboard_endpoint))
+        return redirect(_next_url() or url_for(current_user.dashboard_endpoint))
 
     form = form_class()
     if form.validate_on_submit():
@@ -75,7 +78,12 @@ def _register(role, title, form_class):
             form.phone.errors.append("Энэ утасны дугаар бүртгэлтэй байна.")
         else:
             login_user(user)
+            next_url = _next_url()
+            if role == Role.WORKER and next_url:
+                # Applying needs skills on the profile, so fill that in first, then go back.
+                flash("Бүртгэл амжилттай үүслээ. Хүсэлт илгээхийн өмнө ур чадвараа сонгоно уу.", "success")
+                return redirect(url_for("worker.edit_profile", next=next_url))
             flash("Бүртгэл амжилттай үүслээ.", "success")
-            return redirect(url_for(user.dashboard_endpoint))
+            return redirect(next_url or url_for(user.dashboard_endpoint))
 
-    return render_template("auth/register.html", form=form, title=title)
+    return render_template("auth/register.html", form=form, title=title, next_url=_next_url())

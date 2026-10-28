@@ -4,11 +4,20 @@
 <h1 class="h4">Админ самбар</h1>
 <p>Сайн байна уу, {{ current_user.full_name }}.</p>
 <div class="d-grid gap-2 col-md-6">
+  <a class="btn btn-warning" href="{{ url_for('admin.applications') }}">
+    Ажилтны хүсэлтүүд (хянах) <span class="badge text-bg-light">{{ pending_applications }}</span>
+  </a>
+  {% if open_disputes %}
+    <div class="alert alert-danger small mb-0">Шийдвэрлээгүй ирц/гүйцэтгэлийн гомдол: {{ open_disputes }}.
+      Ажлын «Ирц» хуудаснаас шийдвэрлэнэ.</div>
+  {% endif %}
+  <a class="btn btn-success" href="{{ url_for('admin.new_listing') }}">+ Шинэ ажлын зар (утсаар ирсэн)</a>
+  <a class="btn btn-outline-success" href="{{ url_for('admin.listing_overview') }}">Ажлын зарууд</a>
   <a class="btn btn-primary" href="{{ url_for('admin.jobs', status='pending') }}">
     Шинэ хүсэлтүүд <span class="badge text-bg-light">{{ pending_count }}</span>
   </a>
   <a class="btn btn-outline-primary" href="{{ url_for('admin.jobs') }}">Бүх ажлын хүсэлт</a>
   <a class="btn btn-outline-primary" href="{{ url_for('admin.workers') }}">Ажилтнууд</a>
+  <a class="btn btn-outline-success" href="{{ url_for('admin.finance_dashboard') }}">Санхүү</a>
 </div>
-<p class="text-muted mt-3">Ажилтан томилох, төлбөрийн удирдлага дараагийн шатуудад нэмэгдэнэ.</p>
 {% endblock %}

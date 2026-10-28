@@ -1,16 +1,84 @@
 {% extends "base.html" %}
+{% from "_map.html" import leaflet_css, leaflet_js, map_box %}
+{% from "_office.html" import call_office_button, call_first_notice with context %}
+{% from "_public_job.html" import job_card with context %}
+{% block title %}Эрдэнэт Ажил — Өнөөдрийн ажлын зар{% endblock %}
+{% block head %}{{ leaflet_css() }}{% endblock %}
 {% block content %}
-<div class="text-center py-4">
-  <h1 class="h3 mb-3">Эрдэнэт Ажил</h1>
-  <p class="lead">Өдрийн ажилтан болон ажил олгогчийг холбох товчоо.</p>
-  {% if current_user.is_authenticated %}
-    <a class="btn btn-primary" href="{{ url_for(current_user.dashboard_endpoint) }}">Миний самбар</a>
-  {% else %}
-    <div class="d-grid gap-2 col-md-6 mx-auto">
-      <a class="btn btn-primary" href="{{ url_for('auth.register_worker') }}">Ажил хайж байна</a>
-      <a class="btn btn-outline-primary" href="{{ url_for('auth.register_employer') }}">Ажилтан хайж байна</a>
-      <a class="btn btn-link" href="{{ url_for('auth.login') }}">Нэвтрэх</a>
+<section class="board-hero mb-3">
+  <h1 class="h3 mb-1">Эрдэнэт Ажил</h1>
+  <p class="lead mb-2">Эрдэнэт хотын өдрийн ажлын зар. Бүртгэлгүйгээр үзээд, тохирох ажилд аппаас хүсэлт илгээгээрэй.</p>
+  <div class="mb-2">{{ call_first_notice() }}</div>
+  {{ call_office_button() }}
+</section>
+
+<details class="card mb-3" {% if request.args %}open{% endif %}>
+  <summary class="card-header fw-semibold">🔎 Хайх, шүүх</summary>
+  <form method="get" class="card-body row g-2" novalidate>
+    <div class="col-12">
+      {{ form.q.label(class="form-label small mb-1") }}
+      {{ form.q(class="form-control", placeholder="Жишээ нь: ачаа, цэвэрлэгээ", maxlength=50) }}
     </div>
-  {% endif %}
+    <div class="col-6">
+      {{ form.job_type.label(class="form-label small mb-1") }}
+      {{ form.job_type(class="form-select") }}
+    </div>
+    <div class="col-6">
+      {{ form.when.label(class="form-label small mb-1") }}
+      {{ form.when(class="form-select") }}
+    </div>
+    <div class="col-12 col-sm-6">
+      {{ form.min_wage.label(class="form-label small mb-1") }}
+      {{ form.min_wage(class="form-control", inputmode="numeric", placeholder="50000") }}
+    </div>
+    <div class="col-12 col-sm-6 d-flex gap-2 align-items-end">
+      <button type="submit" class="btn btn-primary flex-fill">Шүүх</button>
+      <a class="btn btn-outline-secondary flex-fill" href="{{ url_for('main.index') }}">Цэвэрлэх</a>
+    </div>
+  </form>
+</details>
+
+<div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+  <h2 class="h5 mb-0">
+    Нээлттэй ажил <span class="text-muted fs-6">({{ cards|length }}{% if filtered %} / {{ total }}{% endif %})</span>
+  </h2>
+  <div class="btn-group d-lg-none" role="group" aria-label="Харах хэлбэр">
+    <button type="button" class="btn btn-outline-primary active" data-view-button="list" aria-pressed="true">☰ Жагсаалт</button>
+    <button type="button" class="btn btn-outline-primary" data-view-button="map" aria-pressed="false">🗺 Газрын зураг</button>
+  </div>
 </div>
+
+<div id="board" class="row g-3" data-view="list">
+  <div class="col-lg-6 board-list">
+    {% if cards %}
+      <div class="d-grid gap-3">
+        {% for card in cards %}{{ job_card(card) }}{% endfor %}
+      </div>
+    {% elif total %}
+      <div class="alert alert-light border">Шүүлтүүрт тохирох ажил олдсонгүй. <a href="{{ url_for('main.index') }}">Бүх ажлыг харах</a></div>
+    {% else %}
+      <div class="alert alert-light border">
+        <div class="fw-semibold">Одоогоор нээлттэй ажлын зар алга.</div>
+        Шинэ ажил ихэвчлэн өглөө нэмэгддэг. Дараа дахин шалгах эсвэл оффис руу залгаарай.
+      </div>
+    {% endif %}
+  </div>
+  <div class="col-lg-6 board-map">
+    <div class="sticky-lg-top board-map-inner">
+      {{ map_box("job-map", "Ажлын байршлын газрын зураг") }}
+      <div id="map-problem" class="alert alert-warning small mt-2 d-none" role="status"></div>
+      <p class="small text-muted mt-1 mb-0">
+        Тэмдэглэгээ нь ойролцоо байршлыг заана.
+        {% if cards and not map_points %}Эдгээр заранд газрын зургийн цэг оруулаагүй байна.{% endif %}
+        {% if cards|length > map_points|length and map_points %}Зарим зар зөвхөн жагсаалтад харагдана.{% endif %}
+      </p>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="job-map-data">{{ map_points|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+  {{ leaflet_js() }}
+  <script src="{{ url_for('static', filename='js/job_map.js') }}"></script>
 {% endblock %}

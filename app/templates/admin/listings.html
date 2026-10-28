@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Ажлын зарууд{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h1 class="h4 mb-0">Ажлын зарууд</h1>
+  <a class="btn btn-primary" href="{{ url_for('admin.new_listing') }}">+ Шинэ зар</a>
+</div>
+<p class="small text-muted">Нийтийн самбарт зөвхөн «Нийтлэгдсэн» зарууд харагдана. Ажил эхэлсэн, дууссан, цуцлагдсан зар энд харагдахгүй.</p>
+
+{% for state, jobs in groups.items() %}
+  <h2 class="h6 mt-3">
+    <span class="badge text-bg-{{ ListingState.BADGES[state] }}">{{ ListingState.LABELS[state] }}</span>
+    <span class="text-muted">({{ jobs|length }})</span>
+  </h2>
+  {% if jobs %}
+    <div class="list-group">
+      {% for job in jobs %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.job_detail', job_id=job.id) }}">
+          <div class="d-flex justify-content-between gap-2">
+            <span class="fw-semibold text-break">{{ job.title }}</span>
+            <span class="small text-nowrap">{{ job.positions_taken }} / {{ job.workers_needed }}</span>
+          </div>
+          <div class="small text-muted">
+            {{ job.work_date|mn_date }} {{ job.start_time|hm }}–{{ job.end_time|hm }} · {{ job.public_location }}
+            · {{ job.wage_per_worker|mnt }}
+            {% if job.listing %} · шинэчилсэн {{ job.listing.updated_at|mn_datetime }}{% endif %}
+            {% if job.status == 'pending' %} · <span class="text-warning-emphasis">хүсэлт зөвшөөрөгдөөгүй</span>{% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="small text-muted mb-0">Алга.</p>
+  {% endif %}
+{% endfor %}
+{% endblock %}

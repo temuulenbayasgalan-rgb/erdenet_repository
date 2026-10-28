@@ -74,12 +74,12 @@ def test_only_employers_edit_company_name(client, make_user, login, role):
 # --- what workers see ---------------------------------------------------------------------------
 
 @pytest.fixture
-def setup(make_user, make_job, make_worker, assign, login):
+def setup(make_user, make_job, make_listed_job, make_worker, assign, login):
     named = make_user(phone="99330001", role=Role.EMPLOYER, full_name="Ганбат Дорж")
     named.company_name = "Эрдэнэ Трейд ХХК"
     private = make_user(phone="99330002", role=Role.EMPLOYER, full_name="Хувь Хүн Нэртэй")
     db.session.commit()
-    open_named = make_job(named, status=JobStatus.ACCEPTED, title="Нэртэй ажил")
+    open_named = make_listed_job(named, title="Нэртэй ажил")
     open_private = make_job(private, status=JobStatus.ACCEPTED, title="Хувь хүний ажил",
                             work_date=office_today())
     worker = make_worker("99110001")

@@ -1,4 +1,4 @@
-"""Assignment and application rules in app/services/staffing.py."""
+"""Assignment rules in app/services/staffing.py."""
 import threading
 from datetime import time, timedelta
 
@@ -19,7 +19,7 @@ from app.models import (
     User,
 )
 from app.services import staffing
-from app.services.staffing import StaffingError, apply_to_job, assign_worker, eligible_workers_query
+from app.services.staffing import StaffingError, assign_worker, eligible_workers_query
 from app.validation import office_today
 from tests.conftest import seed_default_skills, tomorrow
 
@@ -52,13 +52,16 @@ def test_assignment_is_created_with_integer_wage(job, make_worker, assign, admin
     assert assignment.created_at is not None
 
 
-def test_assignment_approves_pending_application(job, make_worker, assign, admin_user):
+def test_assignment_approves_pending_application(make_listed_job, employer, make_worker, assign, admin_user,
+                                                 apply):
+    job = make_listed_job(employer)
     worker = make_worker("99110001")
-    application = apply_to_job(job, worker)
-    assign(job, worker)
+    application = apply(job, worker)
+    assignment = assign(job, worker)
     db.session.expire_all()
     assert application.status == ApplicationStatus.APPROVED
     assert application.reviewed_by_id == admin_user.id
+    assert application.assignment.id == assignment.id
 
 
 def test_worker_without_application_can_be_assigned(job, make_worker, assign):
@@ -201,7 +204,7 @@ def test_same_time_on_another_day_is_allowed(job, make_job, employer, make_worke
 def test_cancelled_assignment_frees_the_worker(job, make_job, employer, make_worker, assign, admin_user):
     worker = make_worker("99110001")
     first = assign(job, worker)
-    staffing.cancel_assignment(first, admin_user)
+    staffing.cancel_assignment(first, admin_user, "Тестийн шалтгаан")
     other = make_job(employer, status=JobStatus.ACCEPTED)  # same time
     assign(other, worker)
     # ... and the cancelled one can be re-created later, as a new row.
@@ -211,7 +214,7 @@ def test_cancelled_assignment_frees_the_worker(job, make_job, employer, make_wor
 
 def test_reassigning_after_cancellation_creates_new_row(job, make_worker, assign, admin_user):
     worker = make_worker("99110001")
-    staffing.cancel_assignment(assign(job, worker), admin_user)
+    staffing.cancel_assignment(assign(job, worker), admin_user, "Тестийн шалтгаан")
     assign(job, worker)
     rows = db.session.scalars(db.select(Assignment).filter_by(job_id=job.id, worker_id=worker.id)).all()
     assert sorted(r.status for r in rows) == ["active", "cancelled"]
@@ -219,15 +222,15 @@ def test_reassigning_after_cancellation_creates_new_row(job, make_worker, assign
 
 def test_cancel_twice_is_rejected(job, make_worker, assign, admin_user):
     assignment = assign(job, make_worker("99110001"))
-    staffing.cancel_assignment(assignment, admin_user)
+    staffing.cancel_assignment(assignment, admin_user, "Тестийн шалтгаан")
     with pytest.raises(StaffingError):
-        staffing.cancel_assignment(assignment, admin_user)
+        staffing.cancel_assignment(assignment, admin_user, "Тестийн шалтгаан")
 
 
 def test_non_admin_cannot_cancel(job, make_worker, assign, employer):
     assignment = assign(job, make_worker("99110001"))
     with pytest.raises(StaffingError):
-        staffing.cancel_assignment(assignment, employer)
+        staffing.cancel_assignment(assignment, employer, "Тестийн шалтгаан")
     assert assignment.status == AssignmentStatus.ACTIVE
 
 
@@ -258,20 +261,7 @@ def test_eligible_workers_query(job, make_worker, assign, make_user):
     assert [w.phone for w in free] == [ready.phone]
 
 
-# --- applications -----------------------------------------------------------------------
-
-def test_apply_creates_pending_application(job, make_worker):
-    application = apply_to_job(job, make_worker("99110001"))
-    assert application.status == ApplicationStatus.PENDING
-
-
-def test_duplicate_application_is_rejected(job, make_worker):
-    worker = make_worker("99110001")
-    apply_to_job(job, worker)
-    with pytest.raises(StaffingError, match="өргөдөл гаргасан"):
-        apply_to_job(job, worker)
-    assert db.session.scalar(db.select(db.func.count(JobApplication.id))) == 1
-
+# --- applications (the rest is in test_applications.py) ---------------------------------
 
 def test_database_blocks_duplicate_application(job, make_worker):
     worker = make_worker("99110001")
@@ -279,60 +269,6 @@ def test_database_blocks_duplicate_application(job, make_worker):
     with pytest.raises(IntegrityError):
         db.session.commit()
     db.session.rollback()
-
-
-@pytest.mark.parametrize("status", [JobStatus.PENDING, JobStatus.IN_PROGRESS, JobStatus.CANCELLED])
-def test_cannot_apply_to_job_that_is_not_open(make_job, employer, make_worker, status):
-    with pytest.raises(StaffingError, match="өргөдөл авахаа больсон"):
-        apply_to_job(make_job(employer, status=status), make_worker("99110001"))
-
-
-def test_cannot_apply_to_full_job(make_job, employer, make_worker, assign):
-    full = make_job(employer, status=JobStatus.ACCEPTED, workers_needed=1)
-    assign(full, make_worker("99110001"))
-    with pytest.raises(StaffingError, match="өргөдөл авахаа больсон"):
-        apply_to_job(full, make_worker("99110002"))
-
-
-def test_incomplete_or_unavailable_worker_cannot_apply(job, make_worker):
-    with pytest.raises(StaffingError, match="ур чадвараа сонгоно"):
-        apply_to_job(job, make_worker("99110001", skills=()))
-    with pytest.raises(StaffingError, match="Ажил хийх боломжтой"):
-        apply_to_job(job, make_worker("99110002", availability=Availability.TEMPORARILY_UNAVAILABLE))
-
-
-def test_withdraw_and_reapply_reuses_row(job, make_worker):
-    worker = make_worker("99110001")
-    application = apply_to_job(job, worker)
-    staffing.withdraw_application(application)
-    assert application.status == ApplicationStatus.WITHDRAWN
-    again = apply_to_job(job, worker)
-    assert again.id == application.id
-    assert again.status == ApplicationStatus.PENDING
-
-
-@pytest.mark.parametrize("status", [ApplicationStatus.APPROVED, ApplicationStatus.REJECTED])
-def test_reviewed_application_cannot_be_withdrawn_or_reopened(job, make_worker, admin_user, status):
-    worker = make_worker("99110001")
-    application = apply_to_job(job, worker)
-    staffing.review_application(application, status, admin_user)
-    with pytest.raises(StaffingError):
-        staffing.withdraw_application(application)
-    with pytest.raises(StaffingError):
-        apply_to_job(job, worker)
-    assert application.status == status
-
-
-def test_only_admin_reviews_and_only_pending(job, make_worker, admin_user):
-    worker = make_worker("99110001")
-    application = apply_to_job(job, worker)
-    with pytest.raises(StaffingError, match="Зөвхөн админ"):
-        staffing.review_application(application, ApplicationStatus.APPROVED, worker)
-    with pytest.raises(StaffingError):
-        staffing.review_application(application, ApplicationStatus.WITHDRAWN, admin_user)
-    staffing.review_application(application, ApplicationStatus.REJECTED, admin_user)
-    with pytest.raises(StaffingError, match="аль хэдийн шийдвэрлэгдсэн"):
-        staffing.review_application(application, ApplicationStatus.APPROVED, admin_user)
 
 
 # --- concurrency ---------------------------------------------------------------------------

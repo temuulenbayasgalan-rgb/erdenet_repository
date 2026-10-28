@@ -21,9 +21,8 @@ def worker(make_worker, login):
 
 
 @pytest.fixture
-def open_job(make_job, employer):
-    return make_job(employer, status=JobStatus.ACCEPTED, title="Нээлттэй ажил",
-                    notes="Бээлийтэй ирэх", workers_needed=2)
+def open_job(make_listed_job, employer):
+    return make_listed_job(employer, title="Нээлттэй ажил", notes="Бээлийтэй ирэх", workers_needed=2)
 
 
 def application_of(worker, job):
@@ -33,29 +32,37 @@ def application_of(worker, job):
 
 # --- browsing --------------------------------------------------------------------------
 
-def test_worker_sees_only_open_jobs(client, worker, make_job, employer, open_job, make_worker, assign):
+def test_worker_sees_only_open_jobs(client, worker, make_job, make_listed_job, employer, open_job,
+                                    make_worker, assign):
     make_job(employer, status=JobStatus.PENDING, title="Хүлээгдэж буй ажил")
     make_job(employer, status=JobStatus.CANCELLED, title="Цуцлагдсан ажил")
     make_job(employer, status=JobStatus.IN_PROGRESS, title="Явагдаж буй ажил")
-    make_job(employer, status=JobStatus.ACCEPTED, title="Өнгөрсөн ажил",
-             work_date=office_today() - timedelta(days=1))
-    full = make_job(employer, status=JobStatus.ACCEPTED, title="Дүүрсэн ажил", workers_needed=1)
+    make_listed_job(employer, title="Өнгөрсөн ажил", work_date=office_today() - timedelta(days=1))
+    full = make_listed_job(employer, title="Дүүрсэн ажил", workers_needed=1)
     assign(full, make_worker("99110009"))
+    # Milestone 8: accepted but never published (or paused) jobs take no applications.
+    make_job(employer, status=JobStatus.ACCEPTED, title="Нийтлээгүй ажил")
+    make_listed_job(employer, title="Түр зогсоосон ажил", published=False)
 
     html = client.get("/worker/jobs").get_data(as_text=True)
     assert "Нээлттэй ажил" in html
-    for hidden in ("Хүлээгдэж буй ажил", "Цуцлагдсан ажил", "Явагдаж буй ажил", "Өнгөрсөн ажил", "Дүүрсэн ажил"):
+    for hidden in ("Хүлээгдэж буй ажил", "Цуцлагдсан ажил", "Явагдаж буй ажил", "Өнгөрсөн ажил", "Дүүрсэн ажил",
+                   "Нийтлээгүй ажил", "Түр зогсоосон ажил"):
         assert hidden not in html
 
 
 def test_job_detail_shows_work_info_but_not_employer(client, worker, open_job):
     html = client.get(f"/worker/jobs/{open_job.id}").get_data(as_text=True)
-    for text in ("Нээлттэй ажил", open_job.location, open_job.description, "60 000 ₮", "Бээлийтэй ирэх"):
+    for text in ("Нээлттэй ажил", open_job.description, "60 000 ₮"):
         assert text in html
+    # Workers not placed on the job see only the approximate area, and no notes; the exact
+    # address appears once the office confirms them (see test_applications.py).
+    assert open_job.location not in html and "Бээлийтэй ирэх" not in html
+    assert "5-р баг, Шинэ төв орчим" in html and "Яг хаяг оффис баталгаажуулсны дараа" in html
     assert "Нууц Компани ХХК" not in html
     assert "99330001" not in html
     assert "Нийт цалин" not in html
-    assert "Өргөдөл гаргах" in html
+    assert "Ажилд хүсэлт илгээх" in html
 
 
 @pytest.mark.parametrize("status", [JobStatus.PENDING, JobStatus.CANCELLED, JobStatus.COMPLETED])
@@ -82,17 +89,17 @@ def test_incomplete_profile_gets_prompt(client, make_worker, login, open_job):
 
 def test_worker_applies(client, worker, open_job):
     response = client.post(f"/worker/jobs/{open_job.id}/apply", follow_redirects=True)
-    assert "Өргөдөл илгээгдлээ." in response.get_data(as_text=True)
+    assert "Хүсэлт илгээгдлээ." in response.get_data(as_text=True)
     assert application_of(worker, open_job).status == ApplicationStatus.PENDING
     html = client.get(f"/worker/jobs/{open_job.id}").get_data(as_text=True)
     assert "Хянагдаж байна" in html
-    assert "Өргөдөл гаргах</button>" not in html
+    assert "Ажилд хүсэлт илгээх</button>" not in html
 
 
 def test_duplicate_application_is_rejected(client, worker, open_job):
     client.post(f"/worker/jobs/{open_job.id}/apply")
     response = client.post(f"/worker/jobs/{open_job.id}/apply", follow_redirects=True)
-    assert "Та энэ ажилд өргөдөл гаргасан байна." in response.get_data(as_text=True)
+    assert "Та энэ ажилд хүсэлт илгээсэн байна." in response.get_data(as_text=True)
     assert db.session.scalar(db.select(db.func.count(JobApplication.id))) == 1
 
 
@@ -111,11 +118,11 @@ def test_crafted_fields_cannot_set_application_status(client, worker, open_job):
 
 # --- my applications ------------------------------------------------------------------------
 
-def test_applications_page_lists_own_only(client, worker, open_job, make_worker, make_job, employer):
-    from app.services.staffing import apply_to_job
+def test_applications_page_lists_own_only(client, worker, open_job, make_worker, make_listed_job, employer,
+                                         apply):
     other = make_worker("99110002")
-    other_job = make_job(employer, status=JobStatus.ACCEPTED, title="Бусдын өргөдөл")
-    apply_to_job(other_job, other)
+    other_job = make_listed_job(employer, title="Бусдын өргөдөл")
+    apply(other_job, other)
     client.post(f"/worker/jobs/{open_job.id}/apply")
 
     html = client.get("/worker/applications").get_data(as_text=True)
@@ -127,7 +134,7 @@ def test_worker_withdraws_pending_application(client, worker, open_job):
     client.post(f"/worker/jobs/{open_job.id}/apply")
     application = application_of(worker, open_job)
     response = client.post(f"/worker/applications/{application.id}/withdraw", follow_redirects=True)
-    assert "Өргөдлөө татан авлаа." in response.get_data(as_text=True)
+    assert "Хүсэлтээ татан авлаа." in response.get_data(as_text=True)
     assert application_of(worker, open_job).status == ApplicationStatus.WITHDRAWN
 
     # ... and can apply again.
@@ -136,19 +143,21 @@ def test_worker_withdraws_pending_application(client, worker, open_job):
 
 
 @pytest.mark.parametrize("status", [ApplicationStatus.APPROVED, ApplicationStatus.REJECTED])
-def test_reviewed_application_cannot_be_withdrawn(client, worker, open_job, admin_user, status):
-    from app.services.staffing import apply_to_job, review_application
-    application = apply_to_job(open_job, worker)
-    review_application(application, status, admin_user)
+def test_reviewed_application_cannot_be_withdrawn(client, worker, open_job, admin_user, status, apply):
+    from app.services import applications
+    application = apply(open_job, worker)
+    if status == ApplicationStatus.APPROVED:
+        applications.accept(application.id, admin_user.id)
+    else:
+        applications.reject(application.id, admin_user.id)
     response = client.post(f"/worker/applications/{application.id}/withdraw", follow_redirects=True)
     assert "Зөвхөн хянагдаж буй" in response.get_data(as_text=True)
     assert application_of(worker, open_job).status == status
 
 
-def test_worker_cannot_withdraw_someone_elses_application(client, worker, open_job, make_worker):
-    from app.services.staffing import apply_to_job
+def test_worker_cannot_withdraw_someone_elses_application(client, worker, open_job, make_worker, apply):
     other = make_worker("99110002")
-    application = apply_to_job(open_job, other)
+    application = apply(open_job, other)
     assert client.post(f"/worker/applications/{application.id}/withdraw").status_code == 404
     assert application_of(other, open_job).status == ApplicationStatus.PENDING
 
@@ -156,9 +165,8 @@ def test_worker_cannot_withdraw_someone_elses_application(client, worker, open_j
 def test_worker_cannot_approve_own_application(client, worker, open_job):
     client.post(f"/worker/jobs/{open_job.id}/apply")
     application = application_of(worker, open_job)
-    for decision in (ApplicationStatus.APPROVED, ApplicationStatus.REJECTED):
-        response = client.post(f"/admin/applications/{application.id}/review", data={"decision": decision})
-        assert response.status_code == 403
+    for action in ("accept", "reject"):
+        assert client.post(f"/admin/applications/{application.id}/{action}").status_code == 403
     assert client.post(f"/admin/jobs/{open_job.id}/assignments",
                        data={"worker_id": worker.id, "agreed_wage": "60000"}).status_code == 403
     assert application_of(worker, open_job).status == ApplicationStatus.PENDING
@@ -181,7 +189,7 @@ def test_assignments_page_shows_own_assignments(client, worker, open_job, make_w
     assign(other_job, make_worker("99110002"))
     cancelled_job = make_job(employer, status=JobStatus.ACCEPTED, title="Цуцалсан томилолт",
                              work_date=office_today() + timedelta(days=4))
-    cancel_assignment(assign(cancelled_job, worker), admin_user)
+    cancel_assignment(assign(cancelled_job, worker), admin_user, "Тестийн шалтгаан")
 
     html = client.get("/worker/assignments").get_data(as_text=True)
     assert "Нээлттэй ажил" in html
@@ -196,7 +204,7 @@ def test_assigned_worker_can_view_job_after_it_fills(client, worker, make_job, e
     assign(job, worker)
     response = client.get(f"/worker/jobs/{job.id}")
     assert response.status_code == 200
-    assert "Та энэ ажилд томилогдсон" in response.get_data(as_text=True)
+    assert "Ажил баталгаажсан" in response.get_data(as_text=True)
 
 
 def test_application_is_not_shown_as_assignment(client, worker, open_job):

@@ -1,0 +1,21 @@
+{# The one place that renders the office phone (from config OFFICE_PHONE). Since
+   Milestone 8 workers apply in the app; calling the office is for questions and problems. #}
+{% macro call_office_button(class_="w-100") %}
+  {% if office_phone %}
+    <a class="btn btn-outline-success {{ class_ }} call-office" href="{{ office_phone_href }}">
+      📞 Асуух зүйл байна — Оффис руу залгах
+      <span class="d-block small fw-normal">{{ office_phone }}</span>
+    </a>
+  {% else %}
+    <div class="alert alert-secondary mb-0 small">
+      Оффисын утасны дугаар одоогоор тохируулагдаагүй байна. Асуух зүйл байвал оффис дээр ирж лавлана уу.
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro call_first_notice() %}
+  <p class="small mb-0">
+    ⚠️ Ажлын байр руу <strong>оффис таны хүсэлтийг баталгаажуулсны дараа л</strong> очно уу.
+    Яг хаяг, хянагчийн утас баталгаажсаны дараа таны аппд харагдана.
+  </p>
+{% endmacro %}

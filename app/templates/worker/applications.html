@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% from "_jobs.html" import badge %}
-{% block title %}Миний өргөдлүүд{% endblock %}
+{% block title %}Миний хүсэлтүүд{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-md-8 col-lg-6">
-    <h1 class="h4 mb-3">Миний өргөдлүүд</h1>
-    <p class="small text-muted">Өргөдөл тэнцсэн ч товчоо томилох хүртэл ажил баталгаажаагүй.
-      Баталгаажсан ажлаа <a href="{{ url_for('worker.assignments') }}">«Миний ажил»</a> хэсгээс харна уу.</p>
+    <h1 class="h4 mb-3">Миний хүсэлтүүд</h1>
+    <p class="small text-muted">«Баталгаажсан» гэвэл та тухайн ажилд томилогдсон: яг хаяг, хянагч, зааврыг ажлын хуудаснаас харна уу.
+      «Хянагдаж байна» үед ажлын байр руу бүү очоорой.</p>
 
     {% if applications %}
       <ul class="list-group">
@@ -17,21 +17,28 @@
               <a class="fw-semibold text-break" href="{{ url_for('worker.job_detail', job_id=job.id) }}">{{ job.title }}</a>
               {{ badge(application) }}
             </div>
-            <div class="small text-muted">{{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }}</div>
+            <div class="small text-muted">{{ job.work_date|mn_date }} · {{ job.start_time|hm }}–{{ job.end_time|hm }}
+              · илгээсэн {{ application.created_at|mn_datetime }}</div>
+            {% if application.status == 'approved' and not application.placement_cancelled %}
+              <a class="btn btn-sm btn-success mt-2" href="{{ url_for('worker.job_detail', job_id=job.id) }}">Яг хаяг, хянагч, заавар</a>
+            {% elif application.status == 'rejected' %}
+              {% set rejected = application.changes|selectattr('action', 'equalto', 'rejected')|list|last %}
+              {% if rejected and rejected.note %}<div class="small text-muted">Шалтгаан: {{ rejected.note }}</div>{% endif %}
+            {% endif %}
             {% if job.status == 'cancelled' %}
               <div class="small text-danger">Ажил цуцлагдсан</div>
             {% endif %}
             {% if application.status == 'pending' %}
               <form method="post" action="{{ url_for('worker.withdraw', application_id=application.id) }}" class="mt-2">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-outline-secondary w-100">Өргөдлөө татан авах</button>
+                <button type="submit" class="btn btn-outline-secondary w-100">Хүсэлтээ татан авах</button>
               </form>
             {% endif %}
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="text-muted">Та өргөдөл гаргаагүй байна. <a href="{{ url_for('worker.jobs') }}">Ажлын зар</a> үзэх.</p>
+      <p class="text-muted">Та хүсэлт илгээгээгүй байна. <a href="{{ url_for('main.index') }}">Ажлын зар</a> үзэх.</p>
     {% endif %}
   </div>
 </div>

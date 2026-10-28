@@ -54,6 +54,39 @@
               </div>
             {% endif %}
 
+            {% for dispute in assignment.disputes %}
+              <div class="border rounded p-2 mt-2 small {% if dispute.status == 'open' %}border-danger{% endif %}">
+                <div class="d-flex justify-content-between gap-2">
+                  <span><strong>Гомдол</strong> · {{ dispute.raised_role_label }}: {{ dispute.raised_by.full_name }} · {{ dispute.created_at|mn_datetime }}</span>
+                  <span class="badge text-bg-{{ dispute.status_badge }}">{{ dispute.status_label }}</span>
+                </div>
+                <div class="preserve-lines text-break">{{ dispute.message }}</div>
+                {% if dispute.status == 'open' %}
+                  <form method="post" action="{{ url_for('admin.resolve_dispute', dispute_id=dispute.id) }}" class="mt-2" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="form-label small mb-1" for="resolution-{{ dispute.id }}">Шийдвэр (гомдол гаргагч, ажилтанд харагдана)</label>
+                    <textarea class="form-control mb-2" id="resolution-{{ dispute.id }}" name="resolution" rows="2" maxlength="500" required></textarea>
+                    <p class="text-muted mb-2">Ирцийг засах бол дээрх товчоор засаад дараа нь шийдвэрээ бичнэ үү.
+                      {% if job.status == 'completed' %}Дууссан ажлын ирц, санхүүг энд өөрчлөхгүй; мөнгөний залруулгыг санхүүгийн буцаалтаар хийнэ.{% endif %}</p>
+                    <button type="submit" class="btn btn-sm btn-success w-100">Шийдвэрлэх</button>
+                  </form>
+                {% else %}
+                  <div class="text-success mt-1">Шийдвэр ({{ dispute.resolved_by.full_name }}, {{ dispute.resolved_at|mn_datetime }}): {{ dispute.resolution }}</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+            {% if can_report %}
+              <details class="small mt-2">
+                <summary>Гомдол бүртгэх (жишээ нь хянагч утсаар мэдэгдсэн)</summary>
+                <form method="post" action="{{ url_for('admin.raise_dispute', assignment_id=assignment.id) }}" class="mt-2" novalidate>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <textarea class="form-control mb-2" name="message" rows="2" maxlength="500" required
+                            aria-label="Гомдлын тайлбар" placeholder="Хэн, юу хэлсэн, юу болсон"></textarea>
+                  <button type="submit" class="btn btn-sm btn-outline-danger w-100">Гомдол бүртгэх</button>
+                </form>
+              </details>
+            {% endif %}
+
             {% if assignment.attendance_changes|length > 1 %}
               <details class="small mt-2">
                 <summary>Өөрчлөлтийн түүх ({{ assignment.attendance_changes|length }})</summary>
